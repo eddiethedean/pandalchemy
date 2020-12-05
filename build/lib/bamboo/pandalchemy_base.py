@@ -1,6 +1,6 @@
-from bamboo.bamboo_utils import list_of_tables, primary_key, get_col_types
-from bamboo.magration_functions import to_sql
-from bamboo.interfaces import IDataBase, ITable
+from pandalchemy.pandalchemy_utils import list_of_tables, primary_key, get_col_types
+from pandalchemy.magration_functions import to_sql
+from pandalchemy.interfaces import IDataBase, ITable
 
 
 def main():

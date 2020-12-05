@@ -1,6 +1,6 @@
-from bamboo.bamboo_base import DataBase
+from pandalchemy.pandalchemy_base import DataBase
 import sqlalchemy as sa
-from bamboo.generate_code import generate_code
+from pandalchemy.generate_code import generate_code
 from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base

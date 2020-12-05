@@ -1,3 +1,3 @@
 __version__ = '0.0.0'
 
-from bamboo.bamboo_base import DataBase, Table
+from pandalchemy.pandalchemy_base import DataBase, Table

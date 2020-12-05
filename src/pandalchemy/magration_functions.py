@@ -1,7 +1,7 @@
 import sqlalchemy as sa
 
-from bamboo.migration import add_column, delete_column
-from bamboo.bamboo_utils import get_table, get_type, get_class
+from pandalchemy.migration import add_column, delete_column
+from pandalchemy.pandalchemy_utils import get_table, get_type, get_class
 
 
 def to_sql(df, name, engine):

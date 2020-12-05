@@ -1,5 +1,5 @@
 
-from bamboo.cli import main
+from pandalchemy.cli import main
 
 
 def test_main():

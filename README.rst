@@ -1,108 +1,54 @@
-========
-Overview
-========
 
-.. start-badges
+# pandalchemy: an intuitive combination of pandas and sqlalchemy to manipulate databases with pandas
 
-.. list-table::
-    :stub-columns: 1
+## What is it?
 
-    * - docs
-      - |docs|
-    * - tests
-      - | |travis| |appveyor| |requires|
-        | |codecov|
-    * - package
-      - | |version| |wheel| |supported-versions| |supported-implementations|
-        | |commits-since|
-.. |docs| image:: https://readthedocs.org/projects/python-bamboo/badge/?style=flat
-    :target: https://readthedocs.org/projects/python-bamboo
-    :alt: Documentation Status
+**pandalchemy** is a Python package that lets Data Scientists create and manipulte databases with the pandas package 
+that they know and love without needing to learn the ins and outs of sqlalchemy.
 
-.. |travis| image:: https://api.travis-ci.org/eddiethedean/python-bamboo.svg?branch=master
-    :alt: Travis-CI Build Status
-    :target: https://travis-ci.org/eddiethedean/python-bamboo
+## Main Features
+Here are just a few of the things that pandaclehmy does:
 
-.. |appveyor| image:: https://ci.appveyor.com/api/projects/status/github/eddiethedean/python-bamboo?branch=master&svg=true
-    :alt: AppVeyor Build Status
-    :target: https://ci.appveyor.com/project/eddiethedean/python-bamboo
+  - Pulls down any sql table with sqlalchemy and maintains all data types, keys, and indexes
+    when you make your changes.
+  - Adds a primary key to a new table, something pandas to_sql method does not do.
+  - Add or delete columns in a database table thanks to sqlalchemy-migrate.
 
-.. |requires| image:: https://requires.io/github/eddiethedean/python-bamboo/requirements.svg?branch=master
-    :alt: Requirements Status
-    :target: https://requires.io/github/eddiethedean/python-bamboo/requirements/?branch=master
+## Where to get it
+The source code is currently hosted on GitHub at:
+https://github.com/eddiethedean/pandalchemy
 
-.. |codecov| image:: https://codecov.io/gh/eddiethedean/python-bamboo/branch/master/graphs/badge.svg?branch=master
-    :alt: Coverage Status
-    :target: https://codecov.io/github/eddiethedean/python-bamboo
+```sh
+# PyPI
+pip install pandalchemy
+```
 
-.. |version| image:: https://img.shields.io/pypi/v/bamboo.svg
-    :alt: PyPI Package latest release
-    :target: https://pypi.org/project/bamboo
+## Dependencies
+- [pandas](https://pandas.pydata.org/)
+- [sqlalchemy==1.3.18](https://pypi.org/project/SQLAlchemy/1.3.18/)
+- [sqlacodegen](https://pypi.org/project/sqlalchemy-migrate/)
+- [sqlalchemy==1.3.18](https://pypi.org/project/SQLAlchemy/1.3.18/)
+- [numpy](https://numpy.org/)
 
-.. |wheel| image:: https://img.shields.io/pypi/wheel/bamboo.svg
-    :alt: PyPI Wheel
-    :target: https://pypi.org/project/bamboo
+# Example code
+from sqlalchemy import create_engine 
+import pandalchemy as ba
 
-.. |supported-versions| image:: https://img.shields.io/pypi/pyversions/bamboo.svg
-    :alt: Supported versions
-    :target: https://pypi.org/project/bamboo
+# Use sqlalchemy to create an engine to connect to existing database
+engine = create_engine('postgresql://scott:tiger@localhost:5432/mydatabase')
 
-.. |supported-implementations| image:: https://img.shields.io/pypi/implementation/bamboo.svg
-    :alt: Supported implementations
-    :target: https://pypi.org/project/bamboo
+# Initialize a pandalchemy DataBase object
+db = ba.DataBase(engine)
 
-.. |commits-since| image:: https://img.shields.io/github/commits-since/eddiethedean/python-bamboo/v0.0.0.svg
-    :alt: Commits since latest release
-    :target: https://github.com/eddiethedean/python-bamboo/compare/v0.0.0...master
+# Accessing a table by name gives you a DataFrame like Table object
+tbl = db['test_table']
+
+# Make changes to the Table just like you would a pandas DataFrame
+tbl['age'] = [age + 1 for age in tbl['age']]
+
+# Use the push method to push all your changes to your database
+db.push()
 
 
 
-.. end-badges
 
-Combines pandas and sqlalchemy to seamlessly allow users to manipulate database tables and create new tables using
-pandas DataFrames.
-
-* Free software: MIT license
-
-Installation
-============
-
-::
-
-    pip install pandalchemy
-
-You can also install the in-development version with::
-
-    pip install https://github.com/eddiethedean/pandalchemy/archive/master.zip
-
-
-Documentation
-=============
-
-
-https://pandalchemy.readthedocs.io/
-
-
-Development
-===========
-
-To run all the tests run::
-
-    tox
-
-Note, to combine the coverage data from all the tox environments run:
-
-.. list-table::
-    :widths: 10 90
-    :stub-columns: 1
-
-    - - Windows
-      - ::
-
-            set PYTEST_ADDOPTS=--cov-append
-            tox
-
-    - - Other
-      - ::
-
-            PYTEST_ADDOPTS=--cov-append tox

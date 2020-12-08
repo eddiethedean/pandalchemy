@@ -4,9 +4,9 @@ with open("README.rst", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="pandalchemy",  # Replace with your own username
+    name="pandalchemy", 
     license='MIT',
-    version="0.0.1",
+    version="0.0.3",
     author="Odos Matthews",
     author_email="odosmatthews@gmail.com",
     description="A package that integrates pandas and sqlaclhemy.",
@@ -21,6 +21,13 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     python_requires='>=3.6',
+    install_requires=[
+        'pandas',
+        'sqlalchemy==1.3.18',
+        'sqlalchemy-migrate',
+        'sqlacodegen',
+        'numpy'
+    ],
     entry_points={
         'console_scripts': [
             'pandalchemy = pandalchemy.cli:main',

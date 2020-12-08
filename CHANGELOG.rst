@@ -6,3 +6,9 @@ Changelog
 ------------------
 
 * First release on PyPI.
+
+
+0.0.3 (2020-12-08)
+-------------------
+
+* Added example code to README

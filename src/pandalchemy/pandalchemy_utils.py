@@ -5,6 +5,7 @@ import numpy as np
 from sqlalchemy import Integer, String, DateTime, MetaData
 from sqlalchemy.ext.automap import automap_base
 from sqlalchemy import Float, Boolean
+from sqlalchemy.orm import sessionmaker
 
 
 def to_sql_k(df, name, con, if_exists='fail', index=True,
@@ -113,3 +114,10 @@ def get_column(table, column_name):
 
 def col_name_exists(engine, table_name, col_name):
     return col_name in get_col_names(get_table(table_name, engine))
+
+
+def get_column_values(engine, table_name, column_name):
+    Session = sessionmaker(engine)
+    session = Session()
+    tbl = get_table(table_name, engine)
+    return session.query(tbl.c[column_name]).all()

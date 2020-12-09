@@ -37,27 +37,28 @@ Description:
         - [sqlacodegen](https://pypi.org/project/sqlalchemy-migrate/)
         - [sqlalchemy-migrate](https://sqlalchemy-migrate.readthedocs.io/en/latest/)
         - [numpy](https://numpy.org/)
-        
+                
         # Example code
         ```sh
         from sqlalchemy import create_engine 
         import pandalchemy as ba 
-        
+                
         # Use sqlalchemy to create an engine to connect to existing database 
         engine = create_engine('postgresql://scott:tiger@localhost:5432/mydatabase') 
-        
+                
         # Initialize a pandalchemy DataBase object 
         db = ba.DataBase(engine) 
-        
+                
         # Accessing a table by name gives you a DataFrame like Table object 
         tbl = db['test_table'] 
-        
+                
         # Make changes to the Table just like you would a pandas DataFrame 
         tbl['age'] = [11, 12, 13, 14, 15] 
-        
+                
         # Use the push method to push all your changes to your database 
         db.push() 
         ```
+        
         
         
         

@@ -12,3 +12,8 @@ Changelog
 -------------------
 
 * Added example code to README
+
+0.0.4 (2020-12-09)
+------------------
+
+* Added utils import to __init__.

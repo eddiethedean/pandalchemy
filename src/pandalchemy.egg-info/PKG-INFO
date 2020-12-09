@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: pandalchemy
-Version: 0.0.3
+Version: 0.0.4
 Summary: A package that integrates pandas and sqlaclhemy.
 Home-page: https://github.com/eddiethedean/pandalchemy
 Author: Odos Matthews
@@ -35,28 +35,29 @@ Description:
         - [pandas](https://pandas.pydata.org/)
         - [sqlalchemy==1.3.18](https://pypi.org/project/SQLAlchemy/1.3.18/)
         - [sqlacodegen](https://pypi.org/project/sqlalchemy-migrate/)
-        - [sqlalchemy==1.3.18](https://pypi.org/project/SQLAlchemy/1.3.18/)
+        - [sqlalchemy-migrate](https://sqlalchemy-migrate.readthedocs.io/en/latest/)
         - [numpy](https://numpy.org/)
         
         # Example code
+        ```sh
         from sqlalchemy import create_engine 
-        import pandalchemy as ba
+        import pandalchemy as ba 
         
-        # Use sqlalchemy to create an engine to connect to existing database
-        engine = create_engine('postgresql://scott:tiger@localhost:5432/mydatabase')
+        # Use sqlalchemy to create an engine to connect to existing database 
+        engine = create_engine('postgresql://scott:tiger@localhost:5432/mydatabase') 
         
-        # Initialize a pandalchemy DataBase object
-        db = ba.DataBase(engine)
+        # Initialize a pandalchemy DataBase object 
+        db = ba.DataBase(engine) 
         
-        # Accessing a table by name gives you a DataFrame like Table object
-        tbl = db['test_table']
+        # Accessing a table by name gives you a DataFrame like Table object 
+        tbl = db['test_table'] 
         
-        # Make changes to the Table just like you would a pandas DataFrame
-        tbl['age'] = [age + 1 for age in tbl['age']]
+        # Make changes to the Table just like you would a pandas DataFrame 
+        tbl['age'] = [11, 12, 13, 14, 15] 
         
-        # Use the push method to push all your changes to your database
-        db.push()
-        
+        # Use the push method to push all your changes to your database 
+        db.push() 
+        ```
         
         
         

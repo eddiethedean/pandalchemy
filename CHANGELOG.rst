@@ -17,3 +17,8 @@ Changelog
 ------------------
 
 * Added utils import to __init__.
+
+0.0.5 (2020-12-11)
+------------------
+
+* Added column value check functions.

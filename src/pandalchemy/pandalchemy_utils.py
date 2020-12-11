@@ -121,7 +121,8 @@ def get_column_values(engine, table_name, column_name):
     Session = sessionmaker(engine)
     session = Session()
     tbl = get_table(table_name, engine)
-    return session.query(tbl.c[column_name]).all()
+    vals = session.query(tbl.c[column_name]).all()
+    return [val[0] for val in vals]
 
 
 def check_vals_exist(engine, table_name, column_name, vals):

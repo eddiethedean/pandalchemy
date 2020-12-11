@@ -5,6 +5,8 @@ import numpy as np
 from sqlalchemy import Integer, String, DateTime, MetaData
 from sqlalchemy.ext.automap import automap_base
 from sqlalchemy import Float, Boolean
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy import func, case
 
 
 def to_sql_k(df, name, con, if_exists='fail', index=True,
@@ -113,3 +115,51 @@ def get_column(table, column_name):
 
 def col_name_exists(engine, table_name, col_name):
     return col_name in get_col_names(get_table(table_name, engine))
+
+
+def get_column_values(engine, table_name, column_name):
+    Session = sessionmaker(engine)
+    session = Session()
+    tbl = get_table(table_name, engine)
+    vals = session.query(tbl.c[column_name]).all()
+    return [val[0] for val in vals]
+
+
+def check_vals_exist(engine, table_name, column_name, vals):
+    Session = sessionmaker(engine)
+    session = Session()
+    tbl = get_table(table_name, engine)
+    col = tbl.c[column_name]
+    
+    out = list()
+    for val in vals:
+        my_case_stmt = case(
+            [
+                (col.in_([val]), True)
+            ],
+            else_=False
+        )
+    
+        score = session.query(func.sum(my_case_stmt)).scalar()
+        out.append(score)
+    session.close()
+    return out
+
+
+def check_val_exist(engine, table_name, column_name, val):
+    Session = sessionmaker(engine)
+    session = Session()
+    tbl = get_table(table_name, engine)
+    col = tbl.c[column_name]
+    my_case_stmt = case(
+        [
+            (col.in_([val]), True)
+        ]
+    )
+
+    score = session.query(func.sum(my_case_stmt)).scalar()
+    session.close()
+    if score:
+        return score
+    else:
+        return False

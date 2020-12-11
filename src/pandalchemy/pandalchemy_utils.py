@@ -6,6 +6,7 @@ from sqlalchemy import Integer, String, DateTime, MetaData
 from sqlalchemy.ext.automap import automap_base
 from sqlalchemy import Float, Boolean
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy import func, case
 
 
 def to_sql_k(df, name, con, if_exists='fail', index=True,
@@ -121,3 +122,43 @@ def get_column_values(engine, table_name, column_name):
     session = Session()
     tbl = get_table(table_name, engine)
     return session.query(tbl.c[column_name]).all()
+
+
+def check_vals_exist(engine, table_name, column_name, vals):
+    Session = sessionmaker(engine)
+    session = Session()
+    tbl = get_table(table_name, engine)
+    col = tbl.c[column_name]
+    
+    out = list()
+    for val in vals:
+        my_case_stmt = case(
+            [
+                (col.in_([val]), True)
+            ],
+            else_=False
+        )
+    
+        score = session.query(func.sum(my_case_stmt)).scalar()
+        out.append(score)
+    session.close()
+    return out
+
+
+def check_val_exist(engine, table_name, column_name, val):
+    Session = sessionmaker(engine)
+    session = Session()
+    tbl = get_table(table_name, engine)
+    col = tbl.c[column_name]
+    my_case_stmt = case(
+        [
+            (col.in_([val]), True)
+        ]
+    )
+
+    score = session.query(func.sum(my_case_stmt)).scalar()
+    session.close()
+    if score:
+        return score
+    else:
+        return False

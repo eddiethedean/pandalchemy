@@ -163,3 +163,22 @@ def check_val_exist(engine, table_name, column_name, val):
         return score
     else:
         return False
+
+
+def delete_rows(table_name, engine, col_name, vals):
+    tbl = get_table(table_name, engine)
+    conn = engine.connect()
+    for val in vals:
+        stmt = tbl.delete().where(tbl.c[col_name] == val)
+        conn.execute(stmt)
+    conn.close()
+
+
+def update_table(df, table_name, engine, key, index=False):
+    matches_bool = check_vals_exist(engine,
+                                     table_name,
+                                     key,
+                                     df[key])
+    matches = df[key][matches_bool]
+    delete_rows(table_name, engine, key, matches)
+    df.to_sql(table_name, engine, if_exists='append', index=index)

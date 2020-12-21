@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: pandalchemy
-Version: 0.0.8
+Version: 0.0.9
 Summary: A package that integrates pandas and sqlaclhemy.
 Home-page: https://github.com/eddiethedean/pandalchemy
 Author: Odos Matthews
@@ -15,7 +15,7 @@ Description:
         that they know and love without needing to learn the ins and outs of sqlalchemy.
         
         ## Main Features
-        Here are just a few of the things that pandaclehmy does:
+        Here are just a few of the things that pandalchemy does:
         
           - Pulls down any sql table with sqlalchemy and maintains all data types, keys, and indexes
             when you make your changes.

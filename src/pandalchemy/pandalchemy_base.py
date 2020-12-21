@@ -63,8 +63,10 @@ class Table(ITable):
         self.engine = engine
         if isinstance(data, Engine):
             self.engine = data
+            self.key = primary_key(name, self.engine)
             self.data = read_sql_table(self.name, self.engine)
         elif (data is None and engine is not None):
+            self.key = primary_key(name, self.engine)
             self.data = read_sql_table(self.name, self.engine)
 
     def __repr__(self):

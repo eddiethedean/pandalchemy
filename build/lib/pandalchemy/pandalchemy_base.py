@@ -1,10 +1,9 @@
-from pandalchemy.pandalchemy_utils import list_of_tables, primary_key, get_col_types
+from pandalchemy.pandalchemy_utils import list_of_tables, primary_key, get_col_types, to_sql_k
 from pandalchemy.magration_functions import to_sql
 from pandalchemy.interfaces import IDataBase, ITable
 
-
-def main():
-    pass
+from pandas import read_sql_table
+from sqlalchemy.engine.base import Engine
 
 
 class DataBase(IDataBase):
@@ -54,13 +53,19 @@ class DataBase(IDataBase):
 class Table(ITable):
     """Pandas DataFrame used to change database tables
     """
-    def __init__(self, name, data, key, f_keys=[], types=dict()):
+    def __init__(self, name, data=None, key=None, f_keys=[], types=dict(), engine=None):
         self.data = data
         self.name = name
         # self.og_data = data.copy()
         self.key = key
         self.f_keys = f_keys
         self.types = types
+        self.engine = engine
+        if isinstance(data, Engine):
+            self.engine = data
+            self.data = read_sql_table(self.name, self.engine)
+        elif (data is None and engine is not None):
+            self.data = read_sql_table(self.name, self.engine)
 
     def __repr__(self):
         return f"""Table(name={self.name}, key={self.key},
@@ -74,6 +79,14 @@ class Table(ITable):
             self.data.iloc[key] = value
         else:
             self.data[key] = value
+
+    def push(self, engine=None):
+        if engine is not None:
+            self.engine = engine
+        if self.name in self.engine.table_names():
+            to_sql(self.data, self.name, self.engine)
+        else:
+            to_sql_k(self.data, self.name, self.engine, keys=self.key)
 
     @property
     def column_names(self):
@@ -93,5 +106,14 @@ class Table(ITable):
     # TODO: add/delete foreign key
 
 
+
 if __name__ == '__main__':
-    main()
+    import pandas as pd
+    import sqlalchemy as sa
+    engine = sa.create_engine('sqlite:///tests/table_test.db')
+    df = pd.DataFrame({'name':['Josh', 'Odos', 'Alec', 'Olivia', 'Max'], 'id':[1, 2, 3, 4, 5]})
+    to_sql_k(df, 'people', engine, index=False, if_exists='replace', keys='id')
+    tbl = Table('people', engine)
+    tbl['id'] = [x+1 for x in tbl['id']]
+    tbl.push()
+    print(Table('people', engine=engine))

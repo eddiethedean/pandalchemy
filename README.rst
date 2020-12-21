@@ -7,7 +7,7 @@
 that they know and love without needing to learn the ins and outs of sqlalchemy.
 
 ## Main Features
-Here are just a few of the things that pandaclehmy does:
+Here are just a few of the things that pandalchemy does:
 
   - Pulls down any sql table with sqlalchemy and maintains all data types, keys, and indexes
     when you make your changes.

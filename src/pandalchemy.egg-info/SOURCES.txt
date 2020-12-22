@@ -1518,6 +1518,7 @@ src/pandalchemy/new_data.py
 src/pandalchemy/pandalchemy_base.py
 src/pandalchemy/pandalchemy_utils.py
 src/pandalchemy.egg-info/PKG-INFO
+src/pandalchemy.egg-info/PKG-INFO-Odos’s MacBook Pro
 src/pandalchemy.egg-info/SOURCES.txt
 src/pandalchemy.egg-info/dependency_links.txt
 src/pandalchemy.egg-info/entry_points.txt

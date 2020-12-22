@@ -30,13 +30,11 @@ def to_sql_k(df, name, con, if_exists='fail', index=True,
 
 def to_sql_indexkey(df, name, con, if_exists='fail',
              schema=None, chunksize=None,
-             dtype=None, schema=None, chunksize=None,
              dtype=None):
     # push DataFrame to database and set primary key to match DataFrame index
     to_sql_k(df=df, name=name, con=con, if_exists=if_exists, index=True,
              index_label=df.index.name, schema=schema, chunksize=chunksize,
-             dtype=dtype, keys=df.index.name, schema=None, chunksize=None,
-             dtype=None)
+             dtype=dtype, keys=df.index.name)
 
 
 def from_sql_keyindex(table_name, con, key, schema=None,

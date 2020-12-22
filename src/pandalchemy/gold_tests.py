@@ -73,22 +73,22 @@ t.append(('add age column, print db object', str(db) == (
     '   18\n1   2  25  Person   19))')))
 
 
-t.append(('', str(tbl.types) == (
+t.append(('col types test', str(tbl.types) == (
     "{'id': INTEGER(), 'key': VARCHAR(), 'val': VARCHAR()}")))
 
 new_db = DataBase(engine)
 
-t.append(('', str(new_db) == (
+t.append(('str types test', str(new_db) == (
     'DataBase(Table(name=second_table, key=id,\n           '
     'id    val key\n0   1  Chair  21), Table(name=test_table, '
     'key=id,\n           id key     val  age\n0   1  21   '
     'Thing   18\n1   2  25  Person   19))')))
 
-t.append(('', str(new_db['test_table'].types) == (
+t.append(('col types test', str(new_db['test_table'].types) == (
     "{'id': INTEGER(), 'key': VARCHAR(), 'val': "
     "VARCHAR(), 'age': INTEGER()}")))
 
-t.append(('', generate_code(engine) == (
+t.append(('col types test codegen', generate_code(engine) == (
     "# coding: utf-8\nfrom sqlalchemy import Column, ForeignKey, "
     "Integer, String\nfrom sqlalchemy.orm import relationship\n"
     "from sqlalchemy.ext.declarative import declarative_base\n\n\n"
@@ -106,12 +106,12 @@ t.append(('', generate_code(engine) == (
 tbl2 = db['second_table']
 tbl2.drop(['val'], axis=1, inplace=True)
 
-t.append(('', str(db) == (
+t.append(('str after col drop', str(db) == (
     'DataBase(Table(name=second_table, key=id,\n           id key\n0   '
     '1  21), Table(name=test_table, key=id,\n           id key     val  '
     'age\n0   1  21   Thing   18\n1   2  25  Person   19))')))
 
-t.append(('', generate_code(engine) == (
+t.append(('codegen after col drop', generate_code(engine) == (
     "# coding: utf-8\nfrom sqlalchemy import Column, ForeignKey, Integer, "
     "String\nfrom sqlalchemy.orm import relationship\nfrom sqlalchemy.ext."
     "declarative import declarative_base\n\n\nBase = declarative_base()\n"

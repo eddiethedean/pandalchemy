@@ -1,4 +1,5 @@
 from pandalchemy.pandalchemy_utils import list_of_tables, primary_key, get_col_types, to_sql_k
+from pandalchemy.pandalchemy_utils import from_sql_keyindex, to_sql_indexkey
 from pandalchemy.magration_functions import to_sql
 from pandalchemy.interfaces import IDataBase, ITable
 
@@ -14,11 +15,9 @@ class DataBase(IDataBase):
     def __init__(self, engine):
         self.engine = engine
         self.db = {name: Table(name,
-                               df,
-                               primary_key(name, self.engine),
-                               types=get_col_types(name, self.engine)
+                               engine,
                                )
-                   for name, df in list_of_tables(self.engine)
+                   for name in engine.list_of_tables()
                    }
 
     def __getitem__(self, key):
@@ -54,9 +53,7 @@ class Table(ITable):
     """Pandas DataFrame used to change database tables
     """
     def __init__(self, name, data=None, key=None, f_keys=[], types=dict(), engine=None):
-        self.data = data
         self.name = name
-        # self.og_data = data.copy()
         self.key = key
         self.f_keys = f_keys
         self.types = types
@@ -64,10 +61,12 @@ class Table(ITable):
         if isinstance(data, Engine):
             self.engine = data
             self.key = primary_key(name, self.engine)
-            self.data = read_sql_table(self.name, self.engine)
+            self.data = from_sql_keyindex(self.name, self.engine, key=self.key)
         elif (data is None and engine is not None):
             self.key = primary_key(name, self.engine)
-            self.data = read_sql_table(self.name, self.engine)
+            self.data = from_sql_keyindex(self.name, self.engine, key=self.key)
+        if self.key is None:
+            self.key = data.index.name
 
     def __repr__(self):
         return f"""Table(name={self.name}, key={self.key},
@@ -91,10 +90,11 @@ class Table(ITable):
                    self.name,
                    self.engine)
         else:
-            to_sql_k(self.data,
+            to_sql_indexkey(self.data,
                      self.name,
                      self.engine,
-                     keys=self.key)
+                     key=self.key,
+                     )
         self.__init__(self.name, engine=self.engine)
             
     @property
@@ -123,6 +123,6 @@ if __name__ == '__main__':
     df = pd.DataFrame({'name':['Josh', 'Odos', 'Alec', 'Olivia', 'Max'], 'id':[1, 2, 3, 4, 5]})
     to_sql_k(df, 'people', engine, index=False, if_exists='replace', keys='id')
     tbl = Table('people', engine)
-    tbl['id'] = [x+1 for x in tbl['id']]
+    tbl['name'] = [x+'_' for x in tbl['name']]
     tbl.push()
     print(Table('people', engine=engine))

@@ -28,6 +28,24 @@ def to_sql_k(df, name, con, if_exists='fail', index=True,
     table.insert(chunksize)
 
 
+def to_sql_indexkey(df, name, con, if_exists='fail',
+             schema=None, chunksize=None,
+             dtype=None, **kwargs):
+    # push DataFrame to database and set primary key to match DataFrame index
+    to_sql_k(df=df, name=name, con=con, if_exists=if_exists, index=True,
+             index_label=df.index.name, schema=schema, chunksize=chunksize,
+             dtype=dtype, kwargs)
+
+
+def from_sql_keyindex(table_name, con, key, schema=None,
+                      coerce_float=True, parse_dates=None,
+                      columns=None, chunksize=None):
+    # pull sql table into a DataFrame with index of table's primary key
+    return pd.read_sql_table(table_name=table_name, con=con, schema=schema,
+                             index_col=key, coerce_float=coerce_float,
+                             parse_dates=parse_dates, columns=columns,
+                             chunksize=chunksize)
+
 def tables_data_equal(t1, t2):
     """Check if tables have same table_name,
        columns, relationships, and data"""
@@ -37,7 +55,17 @@ def tables_data_equal(t1, t2):
     if not df1.equals(df2):
         return False
     return True
+    
 
+def tables_data_equal(t1, t2):
+    """Check if tables have same table_name,
+       columns, relationships, and data"""
+    # data
+    df1 = pd.read_sql(t1.name, t1.metadata.bind)
+    df2 = pd.read_sql(t2.name, t2.metadata.bind)
+    if not df1.equals(df2):
+        return False
+    return True
 
 def tables_metadata_equal(t1, t2):
     """Check if tables have same table_name,

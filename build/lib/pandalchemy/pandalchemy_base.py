@@ -94,7 +94,7 @@ class Table(ITable):
             to_sql_k(self.data,
                      self.name,
                      self.engine,
-                     keys=primary_key(self.name, self.engine))
+                     keys=self.key)
         self.__init__(self.name, engine=self.engine)
             
     @property

@@ -103,8 +103,11 @@ def has_primary_key(table_name, engine):
         return False
     return True
 
-
+ 
 def primary_key(table_name, engine):
+    meta = sa.MetaData()
+    table = sa.Table(table_name, meta, autoload=True, autoload_with=engine)
+    k = table.primary_key.columns.values()
     if has_primary_key(table_name, engine):
         return k[0].name
     return 'index'

@@ -17,7 +17,7 @@ class DataBase(IDataBase):
         self.db = {name: Table(name,
                                engine,
                                )
-                   for name in engine.list_of_tables()
+                   for name in engine.table_names()
                    }
 
     def __getitem__(self, key):

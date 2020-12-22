@@ -57,16 +57,6 @@ def tables_data_equal(t1, t2):
     return True
     
 
-def tables_data_equal(t1, t2):
-    """Check if tables have same table_name,
-       columns, relationships, and data"""
-    # data
-    df1 = pd.read_sql(t1.name, t1.metadata.bind)
-    df2 = pd.read_sql(t2.name, t2.metadata.bind)
-    if not df1.equals(df2):
-        return False
-    return True
-
 def tables_metadata_equal(t1, t2):
     """Check if tables have same table_name,
        columns, relationships, and data"""

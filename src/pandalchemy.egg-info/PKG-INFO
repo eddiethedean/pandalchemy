@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: pandalchemy
-Version: 0.0.17
+Version: 0.0.18
 Summary: A package that integrates pandas and sqlaclhemy.
 Home-page: https://github.com/eddiethedean/pandalchemy
 Author: Odos Matthews

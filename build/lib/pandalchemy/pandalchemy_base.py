@@ -67,8 +67,8 @@ class Table(ITable):
         elif (data is None and engine is not None):
             self.data = from_sql_keyindex(self.name, self.engine, key=self.key)
         
-        if data is not None:
-            self.key = data.index.name
+        if self.data is not None:
+            self.key = self.data.index.name
 
     def __repr__(self):
         return f"""Table(name={self.name}, key={self.key},

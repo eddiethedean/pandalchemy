@@ -59,7 +59,7 @@ class Table(ITable):
         self.types = types
         self.engine = engine
         self.data = data
-        
+
         if isinstance(data, Engine):
             self.engine = data
             self.key = primary_key(name, self.engine)
@@ -95,8 +95,7 @@ class Table(ITable):
         else:
             to_sql_indexkey(self.data,
                      self.name,
-                     self.engine,
-                     key=self.key,
+                     self.engine
                      )
         self.__init__(self.name, engine=self.engine)
             

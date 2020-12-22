@@ -12,7 +12,7 @@ def to_sql(df, name, engine):
     tbl = sa.Table(name, metadata, autoload=True, autoload_with=engine)
     # If table has no primary key, add it to column
     if not has_primary_key(name, engine):
-        p_key = primary_key(name, engine)
+        p_key = df.index.name
         add_primary_key(tbl, p_key)
     # Delete data, leave table columns
     engine.execute(tbl.delete(None))

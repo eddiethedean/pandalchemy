@@ -60,10 +60,14 @@ class Table(ITable):
         self.engine = engine
         self.data = data
 
+        if isinstance(engine, Engine):
+            self.key = primary_key(name, self.engine)
+
         if isinstance(data, Engine):
             self.engine = data
             self.key = primary_key(name, self.engine)
             self.data = from_sql_keyindex(self.name, self.engine, key=self.key)
+            
         elif (data is None and engine is not None):
             self.key = primary_key(name, self.engine)
             self.data = from_sql_keyindex(self.name, self.engine, key=self.key)

@@ -6,9 +6,10 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 import pandas as pd
 
+
 t = []
 
-t.append(('pandas version', pd.__version__ == '1.1.0'))
+# t.append(('pandas version', pd.__version__ == '1.1.0'))
 
 t.append(('sqlalchemy version', sa.__version__ == '1.3.18'))
 

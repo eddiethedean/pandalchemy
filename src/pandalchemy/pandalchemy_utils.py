@@ -95,13 +95,19 @@ def list_of_tables(engine):
             for name in engine.table_names()]
 
 
-def primary_key(table_name, engine):
+def has_primary_key(table_name, engine):
     meta = sa.MetaData()
     table = sa.Table(table_name, meta, autoload=True, autoload_with=engine)
     k = table.primary_key.columns.values()
     if len(k) == 0:
-        return 'index'
-    return k[0].name
+        return False
+    return True
+
+
+def primary_key(table_name, engine):
+    if has_primary_key(table_name, engine):
+        return k[0].name
+    return 'index'
 
 
 def get_table(name, engine):

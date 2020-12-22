@@ -26,7 +26,7 @@ pip install pandalchemy
 ## Dependencies
 - [pandas](https://pandas.pydata.org/)
 - [sqlalchemy==1.3.18](https://pypi.org/project/SQLAlchemy/1.3.18/)
-- [sqlacodegen](https://pypi.org/project/sqlalchemy-migrate/)
+- [sqlacodegen==1.1.6](https://pypi.org/project/sqlalchemy-migrate/)
 - [sqlalchemy-migrate](https://sqlalchemy-migrate.readthedocs.io/en/latest/)
 - [numpy](https://numpy.org/)
         

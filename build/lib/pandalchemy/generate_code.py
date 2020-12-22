@@ -4,6 +4,7 @@ from sqlalchemy import MetaData
 from sqlacodegen.codegen import CodeGenerator
 from importlib import import_module
 
+
 def main():
     connection_string = 'sqlite:///chinook.db'
     engine = create_engine(connection_string)

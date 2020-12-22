@@ -40,7 +40,7 @@ class DataBase(IDataBase):
     def push(self):
         # Push each table to the database
         for tbl in self.db.values():
-            to_sql(tbl.data, tbl.name, self.engine)
+            tbl.push(self.engine)
 
     def pull(self):
         # updates DataBase object with current database data
@@ -63,8 +63,10 @@ class Table(ITable):
         self.engine = engine
         if isinstance(data, Engine):
             self.engine = data
+            self.key = primary_key(name, self.engine)
             self.data = read_sql_table(self.name, self.engine)
         elif (data is None and engine is not None):
+            self.key = primary_key(name, self.engine)
             self.data = read_sql_table(self.name, self.engine)
 
     def __repr__(self):
@@ -83,11 +85,18 @@ class Table(ITable):
     def push(self, engine=None):
         if engine is not None:
             self.engine = engine
-        if self.name in self.engine.table_names():
-            to_sql(self.data, self.name, self.engine)
-        else:
-            to_sql_k(self.data, self.name, self.engine, keys=self.key)
 
+        if self.name in self.engine.table_names():
+            to_sql(self.data,
+                   self.name,
+                   self.engine)
+        else:
+            to_sql_k(self.data,
+                     self.name,
+                     self.engine,
+                     keys=primary_key(self.name, self.engine))
+        self.__init__(self.name, engine=self.engine)
+            
     @property
     def column_names(self):
         return self.data.columns

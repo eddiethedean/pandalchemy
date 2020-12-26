@@ -1,6 +1,6 @@
 from sqlalchemy import Column
 from migrate import *
-from migrate.changeset.constraint import ForeignKeyConstraint
+from migrate.changeset.constraint import PrimaryKeyConstraint
 
 
 def add_column(table, name, type):

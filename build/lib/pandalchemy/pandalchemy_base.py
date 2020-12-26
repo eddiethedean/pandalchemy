@@ -3,7 +3,7 @@ from pandalchemy.pandalchemy_utils import from_sql_keyindex, to_sql_indexkey
 from pandalchemy.magration_functions import to_sql
 from pandalchemy.interfaces import IDataBase, ITable
 
-from pandas import read_sql_table
+from pandas import read_sql_table, DataFrame
 from sqlalchemy.engine.base import Engine
 
 
@@ -15,7 +15,7 @@ class DataBase(IDataBase):
     def __init__(self, engine):
         self.engine = engine
         self.db = {name: Table(name,
-                               engine,
+                               engine=engine,
                                )
                    for name in engine.table_names()
                    }
@@ -40,6 +40,7 @@ class DataBase(IDataBase):
         # Push each table to the database
         for tbl in self.db.values():
             tbl.push(self.engine)
+        self.__init__(self.engine)
 
     def pull(self):
         # updates DataBase object with current database data
@@ -60,15 +61,34 @@ class Table(ITable):
         self.engine = engine
         self.data = data
 
-        if isinstance(data, Engine):
-            self.engine = data
-            self.data = from_sql_keyindex(self.name, self.engine, key=self.key)
-            
-        elif (data is None and engine is not None):
-            self.data = from_sql_keyindex(self.name, self.engine, key=self.key)
         
-        if self.data is not None:
-            self.key = self.data.index.name
+        if isinstance(engine, Engine):
+            # If engine provided and no key: set key to existing table key
+            if self.key is None:
+                if self.name in engine.table_names():
+                    self.key = primary_key(self.name, engine)
+            else:
+                pass # 
+            # If engine and data provided: 
+            if self.data is not None:
+                pass # table probably doesn't already exist?
+            else:
+                # pull data down from table
+                self.data = from_sql_keyindex(self.name,
+                                              self.engine
+                                              )
+        # If no engine provided but data is:
+        elif data is not None:
+            
+            if isinstance(data, dict):
+                self.data = DataFrame(data)
+
+            if isinstance(self.data, DataFrame):
+                self.key = self.data.index.name
+            else:
+                print('Error: data only DataFrame or dict')
+                # Raise Error: Only DataFrame or dict
+        
 
     def __repr__(self):
         return f"""Table(name={self.name}, key={self.key},
@@ -90,12 +110,15 @@ class Table(ITable):
         if self.name in self.engine.table_names():
             to_sql(self.data,
                    self.name,
-                   self.engine)
+                   self.engine,
+                   )
         else:
-            to_sql_indexkey(self.data,
-                     self.name,
-                     self.engine
-                     )
+            self.key = self.data.index.name
+            if self.key is None:
+                to_sql_k(self.data, self.name, engine, keys='index')
+            else:
+                to_sql_k(self.data, self.name, engine, keys=self.key)
+
         self.__init__(self.name, engine=self.engine)
             
     @property
@@ -112,7 +135,6 @@ class Table(ITable):
         self.data.drop(*args, **kwargs)
 
     # TODO: add/delete primary key
-
     # TODO: add/delete foreign key
 
 

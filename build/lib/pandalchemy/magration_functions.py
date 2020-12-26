@@ -6,6 +6,11 @@ from pandalchemy.pandalchemy_utils import get_table, get_type, get_class, has_pr
 
 def to_sql(df, name, engine):
     """Drops all rows then uses bulk_insert_mappings to add data back"""
+    df = df.copy()
+    key = df.index.name
+    if key is None:
+        key = 'index'
+    df[key] = df.index
     Session = sa.orm.sessionmaker(bind=engine)
     session = Session()
     metadata = sa.MetaData(engine)

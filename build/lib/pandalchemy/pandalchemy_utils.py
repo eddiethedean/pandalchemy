@@ -29,18 +29,19 @@ def to_sql_k(df, name, con, if_exists='fail', index=True,
 
 
 def to_sql_indexkey(df, name, con, if_exists='fail',
-             schema=None, chunksize=None,
-             dtype=None):
-    # push DataFrame to database and set primary key to match DataFrame index
+                    schema=None, chunksize=None,
+                    dtype=None):
+    """Push DataFrame to database and set primary key to match DataFrame index"""
     to_sql_k(df=df, name=name, con=con, if_exists=if_exists, index=True,
              index_label=df.index.name, schema=schema, chunksize=chunksize,
              dtype=dtype, keys=df.index.name)
 
 
-def from_sql_keyindex(table_name, con, key, schema=None,
+def from_sql_keyindex(table_name, con, schema=None,
                       coerce_float=True, parse_dates=None,
                       columns=None, chunksize=None):
-    # pull sql table into a DataFrame with index of table's primary key
+    """Pull sql table into a DataFrame with index of table's primary key"""
+    key = primary_key(table_name, con)
     return pd.read_sql_table(table_name=table_name, con=con, schema=schema,
                              index_col=key, coerce_float=coerce_float,
                              parse_dates=parse_dates, columns=columns,
@@ -128,8 +129,7 @@ def primary_key(table_name, engine):
     k = table.primary_key.columns.values()
     if has_primary_key(table_name, engine):
         return k[0].name
-    return 'index'
-
+    return None
 
 def get_table(name, engine):
     metadata = MetaData(engine)

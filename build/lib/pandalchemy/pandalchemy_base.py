@@ -1,5 +1,5 @@
 from pandalchemy.pandalchemy_utils import list_of_tables, primary_key, get_col_types, to_sql_k
-from pandalchemy.pandalchemy_utils import from_sql_keyindex, to_sql_indexkey
+from pandalchemy.pandalchemy_utils import from_sql_keyindex, to_sql_indexkey, copy_table
 from pandalchemy.magration_functions import to_sql
 from pandalchemy.interfaces import IDataBase, ITable
 
@@ -16,6 +16,7 @@ class DataBase(IDataBase):
         self.engine = engine
         self.db = {name: Table(name,
                                engine=engine,
+                               db=self
                                )
                    for name in engine.table_names()
                    }
@@ -48,25 +49,33 @@ class DataBase(IDataBase):
 
     # TODO add_table method
     # TODO drop_table method
+    def add_table(self, table):
+        self.db[table.name] = table
+        table.db = self
+        table.engine = self.engine
 
 
 class Table(ITable):
     """Pandas DataFrame used to change database tables
     """
-    def __init__(self, name, data=None, key=None, f_keys=[], types=dict(), engine=None):
+    def __init__(self, name, data=None, key=None, f_keys=[], types=dict(), engine=None, db=None):
         self.name = name
         self.key = key
         self.f_keys = f_keys
         self.types = types
         self.engine = engine
         self.data = data
+        self.db = db
 
+        if isinstance(self.data, Engine):
+            self.engine = self.data
+            self.data = None
         
-        if isinstance(engine, Engine):
+        if isinstance(self.engine, Engine):
             # If engine provided and no key: set key to existing table key
             if self.key is None:
-                if self.name in engine.table_names():
-                    self.key = primary_key(self.name, engine)
+                if self.name in self.engine.table_names():
+                    self.key = primary_key(self.name, self.engine)
             else:
                 pass # 
             # If engine and data provided: 
@@ -78,17 +87,16 @@ class Table(ITable):
                                               self.engine
                                               )
         # If no engine provided but data is:
-        elif data is not None:
+        elif self.data is not None:
             
-            if isinstance(data, dict):
+            if isinstance(self.data, dict):
                 self.data = DataFrame(data)
 
             if isinstance(self.data, DataFrame):
                 self.key = self.data.index.name
             else:
-                print('Error: data only DataFrame or dict')
-                # Raise Error: Only DataFrame or dict
-        
+                raise TypeError('data can only be DataFrame or dict')
+
 
     def __repr__(self):
         return f"""Table(name={self.name}, key={self.key},
@@ -137,6 +145,14 @@ class Table(ITable):
     # TODO: add/delete primary key
     # TODO: add/delete foreign key
 
+    def copy_push(self, new_name, new_engine=None):
+        if new_engine is None:
+            new_engine = self.engine
+        copy_table(self.engine, self.name, new_name, new_engine)
+
+    def copy(self, new_name):
+        self.copy_push(new_name)
+        return Table(new_name, engine=self.engine)
 
 
 if __name__ == '__main__':

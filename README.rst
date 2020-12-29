@@ -1,17 +1,18 @@
 
-# pandalchemy: an intuitive combination of pandas and sqlalchemy to manipulate databases with pandas
+# pandalchemy: an intuitive combination of Pandas and sqlalchemy to manipulate sql databases with pandas
 
 ## What is it?
 
-**pandalchemy** is a Python package that lets Data Scientists create and manipulte databases with the pandas package 
+**pandalchemy** is a Python package that lets Data Scientists create and manipulte sql databases with the Pandas package 
 that they know and love without needing to learn the ins and outs of sqlalchemy.
 
 ## Main Features
 Here are just a few of the things that pandalchemy does:
 
-  - Pulls down any sql table with sqlalchemy and maintains all data types, keys, and indexes
-    when you make your changes.
-  - Adds a primary key to a new table, something pandas to_sql method does not do.
+  - Pulls down any sql table as a Pandas DataFrame with sqlalchemy and maintains all data types, keys, and indexes
+    after you push your changes.
+  - Make changes to Pandas DataFrame as you normally would then push any changes (new columns, delete columns, new rows, updated rows) to sql database.
+  - Adds a primary key to a new sql table, something pandas to_sql method does not do.
   - Add or delete columns in a database table thanks to sqlalchemy-migrate.
 
 ## Where to get it

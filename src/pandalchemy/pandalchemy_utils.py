@@ -2,7 +2,7 @@ import pandas as pd
 import sqlalchemy as sa
 import numpy as np
 
-from sqlalchemy import Integer, String, DateTime, MetaData
+from sqlalchemy import Integer, String, DateTime, MetaData, Table
 from sqlalchemy.ext.automap import automap_base
 from sqlalchemy import Float, Boolean
 from sqlalchemy.orm import sessionmaker
@@ -209,3 +209,32 @@ def update_table(df, table_name, engine, key, index=False):
     matches = df[key][matches_bool]
     delete_rows(table_name, engine, key, matches)
     df.to_sql(table_name, engine, if_exists='append', index=index)
+
+from sqlalchemy.sql import select
+
+def copy_table(src_engine, src_name, dest_name, dest_engine=None):
+    if dest_engine is None:
+        dest_engine = src_engine
+    # reflect existing columns, and create table object for oldTable
+    src_engine._metadata = MetaData(bind=src_engine)
+    src_engine._metadata.reflect(src_engine) # get columns from existing table
+    srcTable = Table(src_name, src_engine._metadata)
+
+    # create engine and table object for newTable
+    dest_engine._metadata = MetaData(bind=dest_engine)
+    destTable = Table(dest_name, dest_engine._metadata)
+
+    # copy schema and create newTable from oldTable
+    for column in srcTable.columns:
+        destTable.append_column(column.copy())
+    destTable.create()  
+
+    SrcSession = sessionmaker(src_engine)
+    session = SrcSession()
+    query = session.query(srcTable).all()
+
+    DestSession = sessionmaker(dest_engine)
+    dest_session = DestSession()
+    for row in query:
+        dest_session.execute(destTable.insert(row))
+    dest_session.commit()

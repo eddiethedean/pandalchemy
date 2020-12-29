@@ -47,7 +47,6 @@ class DataBase(IDataBase):
         # updates DataBase object with current database data
         self.__init__(self.engine)
 
-    # TODO add_table method
     # TODO drop_table method
     def add_table(self, table):
         self.db[table.name] = table

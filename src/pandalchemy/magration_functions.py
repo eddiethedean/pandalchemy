@@ -1,8 +1,8 @@
 import sqlalchemy as sa
 
-from pandalchemy.migration import add_column, delete_column, add_primary_key
+from pandalchemy.migration import add_column, delete_column
 from pandalchemy.pandalchemy_utils import get_table, get_type, get_class, has_primary_key, primary_key, to_sql_k
-from pandalchemy.pandalchemy_utils import col_name_exists
+from pandalchemy.pandalchemy_utils import col_name_exists, add_primary_key
 
 
 def to_sql(df, name, engine):
@@ -49,12 +49,12 @@ def to_sql(df, name, engine):
         for col_name in old_to_delete:
             delete_column(get_table(name, engine), col_name)
     # Bulk upload all the rows into the table
-    to_sql_k(df, name, engine, index=False, if_exists='replace', keys=key)
+    # to_sql_k(df, name, engine, index=False, if_exists='replace', keys=key)
     #df.to_sql(name, engine, index=False, if_exists='append', keys=key)
-    #if not has_primary_key(name, engine):
-        #tbl = sa.Table(name, metadata, autoload=True, autoload_with=engine)
-        #add_primary_key(tbl, key, engine)
-    #session.bulk_insert_mappings(get_class(name, engine),
-                                 #df.to_dict(orient="records"))
-    #session.commit()
+    if not has_primary_key(name, engine):
+        tbl = sa.Table(name, metadata, autoload=True, autoload_with=engine)
+        add_primary_key(tbl, engine, key)
+    session.bulk_insert_mappings(get_class(name, engine),
+                                 df.to_dict(orient="records"))
+    session.commit()
     

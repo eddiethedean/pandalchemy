@@ -238,3 +238,39 @@ def copy_table(src_engine, src_name, dest_name, dest_engine=None):
     for row in query:
         dest_session.execute(destTable.insert(row))
     dest_session.commit()
+
+
+def add_primary_key(table_name, engine, column_name):
+    # reflect existing columns, and create table object for oldTable
+    engine._metadata = MetaData(bind=engine)
+    engine._metadata.reflect(engine) # get columns from existing table
+    srcTable = Table(table_name, engine._metadata)
+
+    temp_name = table_name + '__temp__'
+
+    # create engine and table object for newTable
+    engine._metadata = MetaData(bind=engine)
+    destTable = Table(temp_name, engine._metadata)
+
+    # copy schema and create newTable from oldTable
+    for column in srcTable.columns:
+        destTable.append_column(column.copy())
+    destTable.append_column(sa.PrimaryKeyConstraint(column_name, name=column_name))
+    destTable.create()  
+
+    SrcSession = sessionmaker(engine)
+    session = SrcSession()
+    query = session.query(srcTable).all()
+
+    DestSession = sessionmaker(engine)
+    dest_session = DestSession()
+    for row in query:
+        dest_session.execute(destTable.insert(row))
+    dest_session.commit()
+
+    # delete old table
+    get_table(table_name, engine).drop()
+    # copy new table to old table name
+    copy_table(engine, temp_name, table_name)
+    # delete temp table
+    get_table(temp_name, engine).drop()

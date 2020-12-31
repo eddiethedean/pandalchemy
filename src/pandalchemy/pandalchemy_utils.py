@@ -7,6 +7,7 @@ from sqlalchemy.ext.automap import automap_base
 from sqlalchemy import Float, Boolean
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import func, case
+from sqlalchemy.sql import select
 
 
 def to_sql_k(df, name, con, if_exists='fail', index=True,
@@ -76,7 +77,11 @@ def tables_metadata_equal(t1, t2):
     return True
 
 
-def get_col_names(table):
+def get_col_names(table, engine=None, name=None):
+    if type(table) is str:
+        name = table
+    if name and engine:
+        table = get_table(name, engine)
     return [c.name for c in table.columns]
 
 
@@ -210,7 +215,6 @@ def update_table(df, table_name, engine, key, index=False):
     delete_rows(table_name, engine, key, matches)
     df.to_sql(table_name, engine, if_exists='append', index=index)
 
-from sqlalchemy.sql import select
 
 def copy_table(src_engine, src_name, dest_name, dest_engine=None):
     if dest_engine is None:

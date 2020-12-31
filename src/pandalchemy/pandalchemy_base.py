@@ -1,9 +1,9 @@
-from pandalchemy.pandalchemy_utils import list_of_tables, primary_key, get_col_types, to_sql_k
-from pandalchemy.pandalchemy_utils import from_sql_keyindex, to_sql_indexkey, copy_table
+from pandalchemy.pandalchemy_utils import primary_key, to_sql_k
+from pandalchemy.pandalchemy_utils import from_sql_keyindex, copy_table, get_col_names
 from pandalchemy.magration_functions import to_sql
 from pandalchemy.interfaces import IDataBase, ITable
 
-from pandas import read_sql_table, DataFrame
+from pandas import DataFrame
 from sqlalchemy.engine.base import Engine
 
 
@@ -12,16 +12,25 @@ class DataBase(IDataBase):
        Needs to connect to a database to push changes
        push method changes database with sql
     """
-    def __init__(self, engine):
+    def __init__(self, engine, lazy=False):
         self.engine = engine
-        self.db = {name: Table(name,
-                               engine=engine,
-                               db=self
-                               )
-                   for name in engine.table_names()
-                   }
+        # lazy loading stops all tables from getting loaded into memory
+        # until table is accessed
+        self.lazy = lazy
+        if not self.lazy:
+            self.db = {name: Table(name,
+                                   engine=engine,
+                                   db=self
+                                   )
+                       for name in engine.table_names()
+                      }
+        else:
+            self.db = {name:None for name in engine.table_names()}
 
     def __getitem__(self, key):
+        if self.lazy:
+            # load table into memory
+            self.db[key] = Table(key, engine=self.engine)
         return self.db[key]
 
     def __setitem__(self, key, value):
@@ -35,17 +44,24 @@ class DataBase(IDataBase):
         return self.db.keys()
 
     def __repr__(self):
-        return f'DataBase({", ".join(repr(tbl) for tbl in self.db.values())})'
+        if self.lazy:
+            names = self.table_names
+            cols = [', '.join(get_col_names(name, self.engine)) for name in names]
+            keys = [primary_key(name, self.engine) for name in names]
+            tables = [f"Table(name={name}, cols=[{c_names}], key={key})\n" for name, c_names, key in zip(names, cols, keys)]
+            return f'DataBase({"       , ".join(tables)}, lazy=True, url={self.engine.url})'
+        return f'DataBase({", ".join(repr(tbl) for tbl in self.db.values())}, url={self.engine.url})'
 
     def push(self):
         # Push each table to the database
         for tbl in self.db.values():
-            tbl.push(self.engine)
-        self.__init__(self.engine)
+            if tbl is not None:
+                tbl.push(self.engine)
+        self.__init__(self.engine, lazy=self.lazy)
 
     def pull(self):
         # updates DataBase object with current database data
-        self.__init__(self.engine)
+        self.__init__(self.engine, lazy=self.lazy)
 
     # TODO drop_table method
     def add_table(self, table):
@@ -132,6 +148,26 @@ class Table(ITable):
     def column_names(self):
         return self.data.columns
 
+    @property
+    def shape(self):
+        return self.data.shape
+
+    @property
+    def index(self):
+        return self.data.index
+
+    @property
+    def columns(self):
+        return self.data.columns
+
+    @property
+    def info(self):
+        return self.data.info
+
+    @property
+    def count(self):
+        return self.data.count
+
     def __getitem__(self, key):
         if type(key) == int:
             return self.data.iloc[key]
@@ -139,7 +175,7 @@ class Table(ITable):
             return self.data[key]
 
     def drop(self, *args, **kwargs):
-        self.data.drop(*args, **kwargs)
+        self.data.drop(inplace=True, *args, **kwargs)
 
     # TODO: add/delete primary key
     # TODO: add/delete foreign key
@@ -153,14 +189,5 @@ class Table(ITable):
         self.copy_push(new_name)
         return Table(new_name, engine=self.engine)
 
-
-if __name__ == '__main__':
-    import pandas as pd
-    import sqlalchemy as sa
-    engine = sa.create_engine('sqlite:///tests/table_test.db')
-    df = pd.DataFrame({'name':['Josh', 'Odos', 'Alec', 'Olivia', 'Max'], 'id':[1, 2, 3, 4, 5]})
-    to_sql_k(df, 'people', engine, index=False, if_exists='replace', keys='id')
-    tbl = Table('people', engine)
-    tbl['name'] = [x+'_' for x in tbl['name']]
-    tbl.push()
-    print(Table('people', engine=engine))
+    def sort_values(self, *args, **kwargs):
+        self.data.sort_values(inplace=True, *args, **kwargs)

@@ -1,5 +1,4 @@
 pandas
 sqlalchemy==1.3.18
 sqlalchemy-migrate
-sqlacodegen==1.1.6
 numpy

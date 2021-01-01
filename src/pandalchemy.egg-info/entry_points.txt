@@ -1,3 +1,0 @@
-[console_scripts]
-pandalchemy = pandalchemy.cli:main
-

@@ -127,6 +127,12 @@ class Table(ITable):
             self.data[key] = value
 
     def push(self, engine=None):
+        # Check data for sql table rules
+        if not self.data.index.is_unique:
+            raise AttributeError(f'Table({self.name}) data index must have unique values')
+        if not self.data.columns.is_unique:
+            raise AttributeError(f'Table({self.name}) data columns must have unique values')
+
         if engine is not None:
             self.engine = engine
 

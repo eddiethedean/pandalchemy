@@ -4,10 +4,9 @@ import numpy as np
 
 from sqlalchemy import Integer, String, DateTime, MetaData, Table
 from sqlalchemy.ext.automap import automap_base
-from sqlalchemy import Float, Boolean
+from sqlalchemy import Float, Boolean, func
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import func, case
-from sqlalchemy.sql import select
 
 
 def to_sql_k(df, name, con, if_exists='fail', index=True,
@@ -278,3 +277,20 @@ def add_primary_key(table_name, engine, column_name):
     copy_table(engine, temp_name, table_name)
     # delete temp table
     get_table(temp_name, engine).drop()
+
+
+def get_row_count(table_name, engine):
+    Session = sessionmaker(engine)
+    session = Session()
+    tbl = get_table(table_name, engine)
+    cols = get_col_names(tbl)
+    col = get_column(tbl, cols[0])
+    return session.query(func.count(col)).scalar()
+
+
+def df_sql_check(df):
+    if not df.index.is_unique:
+        return False
+    if not df.columns.is_unique:
+        return False
+    return True

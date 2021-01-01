@@ -17,13 +17,13 @@ extensions = [
 ]
 source_suffix = '.rst'
 master_doc = 'index'
-project = 'bamboo'
+project = 'pandalchemy'
 year = '2020'
 author = 'Odos Matthews'
 copyright = '{0}, {1}'.format(year, author)
 try:
     from pkg_resources import get_distribution
-    version = release = get_distribution('bamboo').version
+    version = release = get_distribution('pandalchemy').version
 except Exception:
     traceback.print_exc()
     version = release = '0.0.0'

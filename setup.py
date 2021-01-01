@@ -1,10 +1,10 @@
 import setuptools
 
-with open("README.rst", "r") as fh:
+with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="pandalchemy", 
+    name="pandalchemy",
     license='MIT',
     version='0.1.1',
     author="Odos Matthews",

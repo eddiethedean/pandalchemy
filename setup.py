@@ -6,10 +6,10 @@ with open("README.rst", "r") as fh:
 setuptools.setup(
     name="pandalchemy", 
     license='MIT',
-    version='0.1.0',
+    version='0.1.1',
     author="Odos Matthews",
     author_email="odosmatthews@gmail.com",
-    description="A package that integrates pandas and sqlaclhemy.",
+    description="A package that integrates pandas and sqlalchemy.",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/eddiethedean/pandalchemy",

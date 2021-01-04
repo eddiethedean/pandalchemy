@@ -1,9 +1,10 @@
-from pandalchemy.pandalchemy_utils import primary_key, to_sql_k
+from pandalchemy.pandalchemy_utils import primary_key, to_sql_k, update_table
 from pandalchemy.pandalchemy_utils import from_sql_keyindex, copy_table, get_col_names
 from pandalchemy.magration_functions import to_sql
 from pandalchemy.interfaces import IDataBase, ITable
 
 from pandas import DataFrame
+from numpy import empty
 from sqlalchemy.engine.base import Engine
 
 
@@ -118,7 +119,7 @@ class Table(ITable):
         {repr(self.data)})"""
 
     def __len__(self):
-        return len(self.data)
+        return len(self.data.index)
 
     def __setitem__(self, key, value):
         if type(key) == int:
@@ -197,3 +198,47 @@ class Table(ITable):
 
     def sort_values(self, *args, **kwargs):
         self.data.sort_values(inplace=True, *args, **kwargs)
+
+    def sub_tables(self, chunk_size):
+        i = 0
+        while i < len(self):
+            yield SubTable(self.name,
+                           data=self.data[i:i+chunk_size],
+                           key=self.key,
+                           f_keys=self.f_keys,
+                           types=self.types,
+                           engine=self.engine,
+                           db=self.db)
+            i += chunk_size
+
+
+class SubTable(Table):
+    """
+    Acts as a Table but does not have to be all rows
+    or columns of a Table.
+    Must have a primary key column in order to compare
+    to full table when changes are pushed.
+    """
+    def push(self, engine=None):
+        if engine is not None:
+            self.engine = engine
+
+        self.data[self.index.name] = self.data.index 
+        # Check for missing columns
+        #col_names = get_col_names(self.name, engine)
+        #missing = set(col_names) - set(self.data.columns) 
+        #if missing:
+            #raise AttributeError('Pushing less columns than sql table not allowed')
+        # Check for extra columns
+        #extra = set(self.data.columns) - set(col_names)
+        #if extra:
+            #raise AttributeError('Pushing more columns than sql table not allowed')
+
+        # Push any updates to table
+        update_table(self.data,
+                     self.name,
+                     self.engine,
+                     self.key,
+                     index=False)
+
+        self.data.drop(self.index.name, axis=1, inplace=True)

@@ -3,7 +3,7 @@ from pandalchemy.pandalchemy_utils import from_sql_keyindex, copy_table, get_col
 from pandalchemy.magration_functions import to_sql
 from pandalchemy.interfaces import IDataBase, ITable
 
-from pandas import DataFrame
+from pandas import DataFrame, read_sql_table
 from numpy import empty
 from sqlalchemy.engine.base import Engine
 
@@ -199,17 +199,7 @@ class Table(ITable):
     def sort_values(self, *args, **kwargs):
         self.data.sort_values(inplace=True, *args, **kwargs)
 
-    def sub_tables(self, chunk_size):
-        i = 0
-        while i < len(self):
-            yield SubTable(self.name,
-                           data=self.data[i:i+chunk_size],
-                           key=self.key,
-                           f_keys=self.f_keys,
-                           types=self.types,
-                           engine=self.engine,
-                           db=self.db)
-            i += chunk_size
+    
 
 
 class SubTable(Table):
@@ -241,4 +231,30 @@ class SubTable(Table):
                      self.key,
                      index=False)
 
-        self.data.drop(self.index.name, axis=1, inplace=True)
+        self.__init__(self.name, engine=self.engine)
+
+
+
+def sub_tables(table, chunksize, schema=None, *args, **kwargs):
+    engine = table.engine
+    name = table.name
+    key = table.key
+    for chunk in from_sql_keyindex(name,
+                                   engine,
+                                   chunksize=chunksize,
+                                   *args,
+                                   **kwargs
+                                  ):
+        pass
+        yield SubTable()
+
+        i = 0
+        while i < len(self):
+            yield SubTable(self.name,
+                           data=self.data[i:i+chunk_size],
+                           key=self.key,
+                           f_keys=self.f_keys,
+                           types=self.types,
+                           engine=self.engine,
+                           db=self.db)
+            i += chunk_size

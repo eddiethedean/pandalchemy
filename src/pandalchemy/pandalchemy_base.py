@@ -65,14 +65,16 @@ class DataBase(IDataBase):
         self.__init__(self.engine, lazy=self.lazy)
 
     # TODO drop_table method
-    def add_table(self, table):
+    def add_table(self, table, push=False):
         self.db[table.name] = table
         table.db = self
         table.engine = self.engine
+        if push:
+            self.push()
 
 
-class Table(ITable):
-    """Pandas DataFrame used to change database tables
+class BaseTable(ITable):
+    """Pandas DataFrame like object used to change sql database tables
     """
     def __init__(self, name, data=None, key=None, f_keys=[], types=dict(), engine=None, db=None):
         self.name = name
@@ -113,7 +115,6 @@ class Table(ITable):
             else:
                 raise TypeError('data can only be DataFrame or dict')
 
-
     def __repr__(self):
         return f"""Table(name={self.name}, key={self.key},
         {repr(self.data)})"""
@@ -126,6 +127,84 @@ class Table(ITable):
             self.data.iloc[key] = value
         else:
             self.data[key] = value
+            
+    @property
+    def column_names(self):
+        return self.data.columns
+
+    def _init(self, data):
+        return {'name':self.name,
+                'data':data.copy(),
+                'key':self.key,
+                'f_keys':self.f_keys,
+                'types':self.types,
+                'engine':self.engine,
+                'db':self.db}
+
+    @property
+    def shape(self):
+        return self.data.shape
+
+    @property
+    def index(self):
+        return self.data.index
+
+    @property
+    def columns(self):
+        return self.data.columns
+
+    @property
+    def info(self):
+        return self.data.info
+
+    @property
+    def count(self):
+        return self.data.count
+
+    def __getitem__(self, key):
+        # Slice into SubTable
+        if isinstance(key, slice):
+            start, stop, step = key.start, key.stop, key.step
+            df = self.data.loc[start:stop:step, :]
+            return SubTable(**self._init(df))
+        if type(key) == int:
+            return self.data.iloc[key]
+        else:
+            return self.data[key]
+
+    def drop(self, *args, **kwargs):
+        self.data.drop(inplace=True, *args, **kwargs)
+
+    def drop_col(self, col_name):
+        self.drop(col_name, axis=1)
+
+    def head(self, n=5):
+        return SubTable(**self._init(self.data.head(n)))
+
+    def tail(self, n=5):
+        return SubTable(**self._init(self.data.tail(n)))
+
+    # TODO: add/delete primary key
+    # TODO: add/delete foreign key
+    # TODO: add slicing to return SubTable
+
+
+    def sort_values(self, *args, **kwargs):
+        self.data.sort_values(inplace=True, *args, **kwargs)
+
+    
+class Table(BaseTable):
+    """
+    This class maps to an entire sql table.
+    Any changes to DataFrame will get pushed to sql table with push method.
+    
+    """
+
+    def __repr__(self):
+        return f"""SubTable(name={self.name}, key={self.key},
+        {repr(self.data)})"""
+
+    # TODO: add lazy loading feature
 
     def push(self, engine=None):
         # Check data for sql table rules
@@ -150,76 +229,61 @@ class Table(ITable):
                 to_sql_k(self.data, self.name, engine, keys=self.key)
 
         self.__init__(self.name, engine=self.engine)
-            
-    @property
-    def column_names(self):
-        return self.data.columns
 
-    @property
-    def shape(self):
-        return self.data.shape
-
-    @property
-    def index(self):
-        return self.data.index
-
-    @property
-    def columns(self):
-        return self.data.columns
-
-    @property
-    def info(self):
-        return self.data.info
-
-    @property
-    def count(self):
-        return self.data.count
-
-    def __getitem__(self, key):
-        if type(key) == int:
-            return self.data.iloc[key]
-        else:
-            return self.data[key]
-
-    def drop(self, *args, **kwargs):
-        self.data.drop(inplace=True, *args, **kwargs)
-
-    # TODO: add/delete primary key
-    # TODO: add/delete foreign key
-
-    def copy_push(self, new_name, new_engine=None):
-        if new_engine is None:
-            new_engine = self.engine
-        copy_table(self.engine, self.name, new_name, new_engine)
-
-    def copy(self, new_name):
-        self.copy_push(new_name)
-        return Table(new_name, engine=self.engine)
-
-    def sort_values(self, *args, **kwargs):
-        self.data.sort_values(inplace=True, *args, **kwargs)
-
-    
-
-
-class SubTable(Table):
-    """
-    Acts as a Table but does not have to be all rows
-    or columns of a Table.
-    Must have a primary key column in order to compare
-    to full table when changes are pushed.
-    """
-    def push(self, engine=None):
+    def pull(self, engine=None):
         if engine is not None:
             self.engine = engine
 
+        self.__init__(self.name, self.data, self.key, self.f_keys,
+                      self.types, self.engine, self.db)
+
+    def copy_push(self, new_name, engine=None):
+        if engine is not None:
+            target_engine = engine
+        else:
+            target_engine = self.engine
+        copy_table(self.engine, self.name, new_name, target_engine)
+
+    def copy(self, new_name, engine=None):
+        if engine is not None:
+            target_engine = engine
+        else:
+            target_engine = self.engine
+        self.copy_push(new_name, engine=target_engine)
+        return Table(new_name, engine=target_engine)
+
+    def drop_col(self, col_name):
+        self.drop(col_name, axis=1)
+
+
+class SubTable(BaseTable):
+    """
+    Acts as a Table but does not have to be all rows
+    of a sql table.
+    Must have a primary key column in order to compare
+    to full table when changes are pushed.
+    Push Updates matching primary key rows and
+    appends new primary key rows.
+    """
+    # TODO: make __init__ set index as key or index
+    # TODO: add copy_push method
+    # TODO: add copy method
+    
+    def push(self, engine=None, parent_table=None):
+        if engine is not None:
+            self.engine = engine
+        if parent_table is not None:
+            self.parent = parent_table
+        else:
+            self.parent = None
+
         self.data[self.index.name] = self.data.index 
-        # Check for missing columns
+        # TODO: Check for missing columns
         #col_names = get_col_names(self.name, engine)
         #missing = set(col_names) - set(self.data.columns) 
         #if missing:
             #raise AttributeError('Pushing less columns than sql table not allowed')
-        # Check for extra columns
+        # TODO: Check for extra columns
         #extra = set(self.data.columns) - set(col_names)
         #if extra:
             #raise AttributeError('Pushing more columns than sql table not allowed')
@@ -232,29 +296,21 @@ class SubTable(Table):
                      index=False)
 
         self.__init__(self.name, engine=self.engine)
-
+        # update parent Table with SubTable changes
+        if self.db is not None and self.name in self.db:
+            self.db[self.name].pull(self.engine)
+        elif self.parent is not None:
+            self.parent.pull()
+        else:
+            pass
+            # TODO: figure out how to automatically update parent table
 
 
 def sub_tables(table, chunksize, schema=None, *args, **kwargs):
-    engine = table.engine
-    name = table.name
-    key = table.key
-    for chunk in from_sql_keyindex(name,
-                                   engine,
+    for chunk in from_sql_keyindex(table.name,
+                                   table.engine,
                                    chunksize=chunksize,
                                    *args,
                                    **kwargs
                                   ):
-        pass
-        yield SubTable()
-
-        i = 0
-        while i < len(self):
-            yield SubTable(self.name,
-                           data=self.data[i:i+chunk_size],
-                           key=self.key,
-                           f_keys=self.f_keys,
-                           types=self.types,
-                           engine=self.engine,
-                           db=self.db)
-            i += chunk_size
+        yield SubTable(**table._init(chunk))

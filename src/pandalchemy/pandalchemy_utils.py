@@ -197,12 +197,22 @@ def check_val_exist(engine, table_name, column_name, val):
 
 
 def delete_rows(table_name, engine, col_name, vals):
+    Session = sessionmaker(engine)
+    session = Session()
     tbl = get_table(table_name, engine)
-    conn = engine.connect()
-    for val in vals:
-        stmt = tbl.delete().where(tbl.c[col_name] == val)
-        conn.execute(stmt)
-    conn.close()
+    col = tbl.c[col_name]
+    #conn = engine.connect()
+    session.query(tbl).filter(col.in_(vals)).delete(synchronize_session=False)
+                                            
+    #stmt = tbl.delete().where(tbl.c[col_name].in_(subquery...))
+    #session.execute(stmt)
+    session.commit()
+    #for val in vals:
+        #stmt = tbl.delete().where(tbl.c[col_name] == val)
+        #session.execute(stmt)
+        #session.commit()
+    session.close()
+    print('commit success')
 
 
 def update_table(df, table_name, engine, key, index=False):
@@ -294,3 +304,33 @@ def df_sql_check(df):
     if not df.columns.is_unique:
         return False
     return True
+
+
+def get_table_rows(table_name, engine, key, key_matches,
+                   coerce_float=True, params=None,
+                   parse_dates=None, chunksize=None, column_names=None):
+    if column_names is None:
+        column_names = '*'
+    else:
+        column_names = ', '.join(x for x in column_names)
+    return pd.read_sql_query(f'select {column_names} from {table_name} where {key} in {tuple(key_matches)}',
+                             engine,
+                             index_col=key,
+                             coerce_float=True,
+                             params=None,
+                             parse_dates=None,
+                             chunksize=None)
+
+
+def key_chunks(engine, table_name, column_name, chunksize):
+    vals = get_column_values(engine, 'albums_copy', column_name)
+    i = 0
+    stop = i + chunksize
+    while i < len(vals):
+        yield vals[i:i+chunksize]
+        i += chunksize
+
+
+def generate_chunks(engine, table_name, key, chunksize, column_names=None):
+    for keys in key_chunks(engine, table_name, key, chunksize):
+        yield get_table_rows(table_name, engine, key, keys, column_names=column_names)

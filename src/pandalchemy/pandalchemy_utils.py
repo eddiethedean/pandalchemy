@@ -153,6 +153,7 @@ def get_column_values(engine, table_name, column_name):
     session = Session()
     tbl = get_table(table_name, engine)
     vals = session.query(tbl.c[column_name]).all()
+    #vals = engine.execute(f'select {column_name} from {table_name}').fetchall()
     return [val[0] for val in vals]
 
 
@@ -182,12 +183,7 @@ def check_val_exist(engine, table_name, column_name, val):
     session = Session()
     tbl = get_table(table_name, engine)
     col = tbl.c[column_name]
-    my_case_stmt = case(
-        [
-            (col.in_([val]), True)
-        ]
-    )
-
+    my_case_stmt = case([(col.in_([val]), True)])
     score = session.query(func.sum(my_case_stmt)).scalar()
     session.close()
     if score:
@@ -201,18 +197,9 @@ def delete_rows(table_name, engine, col_name, vals):
     session = Session()
     tbl = get_table(table_name, engine)
     col = tbl.c[col_name]
-    #conn = engine.connect()
     session.query(tbl).filter(col.in_(vals)).delete(synchronize_session=False)
-                                            
-    #stmt = tbl.delete().where(tbl.c[col_name].in_(subquery...))
-    #session.execute(stmt)
     session.commit()
-    #for val in vals:
-        #stmt = tbl.delete().where(tbl.c[col_name] == val)
-        #session.execute(stmt)
-        #session.commit()
     session.close()
-    print('commit success')
 
 
 def update_table(df, table_name, engine, key, index=False):
@@ -251,6 +238,9 @@ def copy_table(src_engine, src_name, dest_name, dest_engine=None):
     for row in query:
         dest_session.execute(destTable.insert(row))
     dest_session.commit()
+    session.close()
+    dest_session.close()
+
 
 
 def add_primary_key(table_name, engine, column_name):
@@ -274,12 +264,14 @@ def add_primary_key(table_name, engine, column_name):
     SrcSession = sessionmaker(engine)
     session = SrcSession()
     query = session.query(srcTable).all()
+    session.close()
 
     DestSession = sessionmaker(engine)
     dest_session = DestSession()
     for row in query:
         dest_session.execute(destTable.insert(row))
     dest_session.commit()
+    dest_session.close()
 
     # delete old table
     get_table(table_name, engine).drop()
@@ -287,6 +279,7 @@ def add_primary_key(table_name, engine, column_name):
     copy_table(engine, temp_name, table_name)
     # delete temp table
     get_table(temp_name, engine).drop()
+
 
 
 def get_row_count(table_name, engine):
@@ -308,29 +301,41 @@ def df_sql_check(df):
 
 def get_table_rows(table_name, engine, key, key_matches,
                    coerce_float=True, params=None,
-                   parse_dates=None, chunksize=None, column_names=None):
+                   parse_dates=None, chunksize=None,
+                   column_names=None):
     if column_names is None:
         column_names = '*'
     else:
         column_names = ', '.join(x for x in column_names)
-    return pd.read_sql_query(f'select {column_names} from {table_name} where {key} in {tuple(key_matches)}',
+    return pd.read_sql_query(f'''SELECT {column_names}
+                                 FROM {table_name}
+                                 WHERE {key}
+                                 IN {tuple(key_matches)}''',
                              engine,
                              index_col=key,
-                             coerce_float=True,
-                             params=None,
-                             parse_dates=None,
-                             chunksize=None)
+                             coerce_float=coerce_float,
+                             params=params,
+                             parse_dates=parse_dates,
+                             chunksize=chunksize)
 
 
 def key_chunks(engine, table_name, column_name, chunksize):
-    vals = get_column_values(engine, 'albums_copy', column_name)
+    vals = get_column_values(engine, table_name, column_name)
     i = 0
-    stop = i + chunksize
     while i < len(vals):
         yield vals[i:i+chunksize]
         i += chunksize
 
 
-def generate_chunks(engine, table_name, key, chunksize, column_names=None):
+def table_chunks(engine, table_name, key, chunksize, column_names=None,
+                 coerce_float=True, params=None, parse_dates=None):
+    """Generator function -> [pd.DataFrame]
+    Pulls pandas DataFrame chunks from sql table
+    Doesn't lock up sqlite database
+    """
     for keys in key_chunks(engine, table_name, key, chunksize):
-        yield get_table_rows(table_name, engine, key, keys, column_names=column_names)
+        yield get_table_rows(table_name, engine, key, keys,
+                             column_names=column_names,
+                             coerce_float=coerce_float,
+                             params=params,
+                             parse_dates=parse_dates)

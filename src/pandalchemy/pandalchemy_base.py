@@ -1,10 +1,9 @@
-from pandalchemy.pandalchemy_utils import primary_key, to_sql_k, update_table
+from pandalchemy.pandalchemy_utils import primary_key, to_sql_k, update_table, table_chunks
 from pandalchemy.pandalchemy_utils import from_sql_keyindex, copy_table, get_col_names
 from pandalchemy.magration_functions import to_sql
 from pandalchemy.interfaces import IDataBase, ITable
 
-from pandas import DataFrame, read_sql_table
-from numpy import empty
+from pandas import DataFrame
 from sqlalchemy.engine.base import Engine
 
 
@@ -49,7 +48,8 @@ class DataBase(IDataBase):
             names = self.table_names
             cols = [', '.join(get_col_names(name, self.engine)) for name in names]
             keys = [primary_key(name, self.engine) for name in names]
-            tables = [f"Table(name={name}, cols=[{c_names}], key={key})\n" for name, c_names, key in zip(names, cols, keys)]
+            tables = [f"Table(name={name}, cols=[{c_names}], key={key})\n" for name, c_names,
+                      key in zip(names, cols, keys)]
             return f'DataBase({"       , ".join(tables)}, lazy=True, url={self.engine.url})'
         return f'DataBase({", ".join(repr(tbl) for tbl in self.db.values())}, url={self.engine.url})'
 
@@ -76,7 +76,9 @@ class DataBase(IDataBase):
 class BaseTable(ITable):
     """Pandas DataFrame like object used to change sql database tables
     """
-    def __init__(self, name, data=None, key=None, f_keys=[], types=dict(), engine=None, db=None):
+    def __init__(self, name, data=None, key=None,
+                 f_keys=[], types=dict(), engine=None,
+                 db=None):
         self.name = name
         self.key = key
         self.f_keys = f_keys
@@ -102,8 +104,7 @@ class BaseTable(ITable):
             else:
                 # pull data down from table
                 self.data = from_sql_keyindex(self.name,
-                                              self.engine
-                                              )
+                                              self.engine)
         # If no engine provided but data is:
         elif self.data is not None:
             
@@ -114,10 +115,6 @@ class BaseTable(ITable):
                 self.key = self.data.index.name
             else:
                 raise TypeError('data can only be DataFrame or dict')
-
-    def __repr__(self):
-        return f"""Table(name={self.name}, key={self.key},
-        {repr(self.data)})"""
 
     def __len__(self):
         return len(self.data.index)
@@ -186,8 +183,6 @@ class BaseTable(ITable):
 
     # TODO: add/delete primary key
     # TODO: add/delete foreign key
-    # TODO: add slicing to return SubTable
-
 
     def sort_values(self, *args, **kwargs):
         self.data.sort_values(inplace=True, *args, **kwargs)
@@ -199,9 +194,8 @@ class Table(BaseTable):
     Any changes to DataFrame will get pushed to sql table with push method.
     
     """
-
     def __repr__(self):
-        return f"""SubTable(name={self.name}, key={self.key},
+        return f"""Table(name={self.name}, key={self.key},
         {repr(self.data)})"""
 
     # TODO: add lazy loading feature
@@ -266,16 +260,21 @@ class SubTable(BaseTable):
     appends new primary key rows.
     """
     # TODO: make __init__ set index as key or index
+    def __init__(self, name, data=None, key=None, f_keys=[],
+                 types=dict(), engine=None, db=None):
+        BaseTable.__init__(self, name, data=data, key=key,
+                           f_keys=f_keys, types=types,
+                           engine=engine, db=db)
+
+    def __repr__(self):
+        return f"""SubTable(name={self.name}, key={self.key},
+                            {repr(self.data)})"""
     # TODO: add copy_push method
     # TODO: add copy method
     
-    def push(self, engine=None, parent_table=None):
+    def push(self, engine=None):
         if engine is not None:
             self.engine = engine
-        if parent_table is not None:
-            self.parent = parent_table
-        else:
-            self.parent = None
 
         self.data[self.index.name] = self.data.index 
         # TODO: Check for missing columns
@@ -297,20 +296,18 @@ class SubTable(BaseTable):
 
         self.__init__(self.name, engine=self.engine)
         # update parent Table with SubTable changes
-        if self.db is not None and self.name in self.db:
-            self.db[self.name].pull(self.engine)
-        elif self.parent is not None:
-            self.parent.pull()
-        else:
-            pass
-            # TODO: figure out how to automatically update parent table
+        #if self.db is not None and self.name in self.db:
+            #self.db[self.name].pull(self.engine)
+        #elif self.parent is not None:
+            #self.parent.pull()
+        #else:
+            #pass
+        # TODO: figure out how to automatically update parent table
 
 
-def sub_tables(table, chunksize, schema=None, *args, **kwargs):
-    for chunk in from_sql_keyindex(table.name,
-                                   table.engine,
-                                   chunksize=chunksize,
-                                   *args,
-                                   **kwargs
-                                  ):
+def sub_tables(table, chunksize, column_names=None, coerce_float=True,
+                              params=None, parse_dates=None):
+    for chunk in table_chunks(table.engine, table.name, table.key, chunksize,
+                              column_names=column_names, coerce_float=coerce_float,
+                              params=params, parse_dates=parse_dates):
         yield SubTable(**table._init(chunk))

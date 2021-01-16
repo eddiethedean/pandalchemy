@@ -6,7 +6,8 @@ from pandalchemy.pandalchemy_utils import col_name_exists, add_primary_key
 
 
 def to_sql(df, name, engine):
-    """Drops all rows then uses bulk_insert_mappings to add data back"""
+    """Drops all rows then uses bulk_insert_mappings to add data back
+    """
     df = df.copy()
     key = df.index.name
     if key is None:

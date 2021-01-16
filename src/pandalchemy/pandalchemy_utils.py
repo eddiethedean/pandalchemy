@@ -12,6 +12,8 @@ from sqlalchemy import func, case
 def to_sql_k(df, name, con, if_exists='fail', index=True,
              index_label=None, schema=None, chunksize=None,
              dtype=None, **kwargs):
+    """
+    """
     pandas_sql = pd.io.sql.pandasSQL_builder(con, schema=schema)
 
     if dtype is not None:
@@ -31,7 +33,8 @@ def to_sql_k(df, name, con, if_exists='fail', index=True,
 def to_sql_indexkey(df, name, con, if_exists='fail',
                     schema=None, chunksize=None,
                     dtype=None):
-    """Push DataFrame to database and set primary key to match DataFrame index"""
+    """Push DataFrame to database and set primary key to match DataFrame index
+    """
     to_sql_k(df=df, name=name, con=con, if_exists=if_exists, index=True,
              index_label=df.index.name, schema=schema, chunksize=chunksize,
              dtype=dtype, keys=df.index.name)
@@ -40,7 +43,8 @@ def to_sql_indexkey(df, name, con, if_exists='fail',
 def from_sql_keyindex(table_name, con, schema=None,
                       coerce_float=True, parse_dates=None,
                       columns=None, chunksize=None):
-    """Pull sql table into a DataFrame with index of table's primary key"""
+    """Pull sql table into a DataFrame with index of table's primary key
+    """
     key = primary_key(table_name, con)
     return pd.read_sql_table(table_name=table_name, con=con, schema=schema,
                              index_col=key, coerce_float=coerce_float,
@@ -49,7 +53,8 @@ def from_sql_keyindex(table_name, con, schema=None,
 
 def tables_data_equal(t1, t2):
     """Check if tables have same table_name,
-       columns, relationships, and data"""
+    columns, relationships, and data
+    """
     # data
     df1 = pd.read_sql(t1.name, t1.metadata.bind)
     df2 = pd.read_sql(t2.name, t2.metadata.bind)
@@ -60,7 +65,8 @@ def tables_data_equal(t1, t2):
 
 def tables_metadata_equal(t1, t2):
     """Check if tables have same table_name,
-       columns, relationships, and data"""
+    columns, relationships, and data
+    """
     # table_name
     if t1.name != t2.name:
         return False
@@ -77,6 +83,8 @@ def tables_metadata_equal(t1, t2):
 
 
 def get_col_names(table, engine=None, name=None):
+    """
+    """
     if type(table) is str:
         name = table
     if name and engine:
@@ -85,7 +93,8 @@ def get_col_names(table, engine=None, name=None):
 
 
 def get_type(df, col_name):
-    # return sqlalcheymy type based on DataFrame col type
+    """return sqlalcheymy type based on DataFrame col type
+    """
     pd_type = df[col_name].dtype
     if pd_type == np.int64:
         return Integer
@@ -99,6 +108,8 @@ def get_type(df, col_name):
 
 
 def get_class(name, engine):
+    """
+    """
     metadata = sa.MetaData(engine)
     metadata.reflect(engine, only=[name])
     Base = automap_base(metadata=metadata)
@@ -107,18 +118,23 @@ def get_class(name, engine):
 
 
 def get_col_types(name, engine):
-    """Returns dict of table column names:data_type"""
+    """Returns dict of table column names:data_type
+    """
     md = sa.MetaData()
     table = sa.Table(name, md, autoload=True, autoload_with=engine)
     return {c.name: c.type for c in table.c}
 
 
 def list_of_tables(engine):
+    """
+    """
     return [(name, pd.read_sql(name, con=engine))
             for name in engine.table_names()]
 
 
 def has_primary_key(table_name, engine):
+    """
+    """
     meta = sa.MetaData()
     table = sa.Table(table_name, meta, autoload=True, autoload_with=engine)
     k = table.primary_key.columns.values()
@@ -128,6 +144,8 @@ def has_primary_key(table_name, engine):
 
  
 def primary_key(table_name, engine):
+    """
+    """
     meta = sa.MetaData()
     table = sa.Table(table_name, meta, autoload=True, autoload_with=engine)
     k = table.primary_key.columns.values()
@@ -136,19 +154,27 @@ def primary_key(table_name, engine):
     return None
 
 def get_table(name, engine):
+    """
+    """
     metadata = MetaData(engine)
     return sa.Table(name, metadata, autoload=True, autoload_with=engine)
 
 
 def get_column(table, column_name):
+    """
+    """
     return table.c[column_name]
 
 
 def col_name_exists(engine, table_name, col_name):
+    """
+    """
     return col_name in get_col_names(get_table(table_name, engine))
 
 
 def get_column_values(engine, table_name, column_name):
+    """
+    """
     Session = sessionmaker(engine)
     session = Session()
     tbl = get_table(table_name, engine)
@@ -158,6 +184,8 @@ def get_column_values(engine, table_name, column_name):
 
 
 def check_vals_exist(engine, table_name, column_name, vals):
+    """
+    """
     Session = sessionmaker(engine)
     session = Session()
     tbl = get_table(table_name, engine)
@@ -179,6 +207,8 @@ def check_vals_exist(engine, table_name, column_name, vals):
 
 
 def check_val_exist(engine, table_name, column_name, val):
+    """
+    """
     Session = sessionmaker(engine)
     session = Session()
     tbl = get_table(table_name, engine)
@@ -193,6 +223,8 @@ def check_val_exist(engine, table_name, column_name, val):
 
 
 def delete_rows(table_name, engine, col_name, vals):
+    """
+    """
     Session = sessionmaker(engine)
     session = Session()
     tbl = get_table(table_name, engine)
@@ -203,6 +235,8 @@ def delete_rows(table_name, engine, col_name, vals):
 
 
 def update_table(df, table_name, engine, key, index=False):
+    """
+    """
     matches_bool = check_vals_exist(engine,
                                      table_name,
                                      key,
@@ -213,6 +247,8 @@ def update_table(df, table_name, engine, key, index=False):
 
 
 def copy_table(src_engine, src_name, dest_name, dest_engine=None):
+    """
+    """
     if dest_engine is None:
         dest_engine = src_engine
     # reflect existing columns, and create table object for oldTable
@@ -244,6 +280,8 @@ def copy_table(src_engine, src_name, dest_name, dest_engine=None):
 
 
 def add_primary_key(table_name, engine, column_name):
+    """
+    """
     # reflect existing columns, and create table object for oldTable
     engine._metadata = MetaData(bind=engine)
     engine._metadata.reflect(engine) # get columns from existing table
@@ -283,6 +321,8 @@ def add_primary_key(table_name, engine, column_name):
 
 
 def get_row_count(table_name, engine):
+    """
+    """
     Session = sessionmaker(engine)
     session = Session()
     tbl = get_table(table_name, engine)
@@ -292,6 +332,8 @@ def get_row_count(table_name, engine):
 
 
 def df_sql_check(df):
+    """
+    """
     if not df.index.is_unique:
         return False
     if not df.columns.is_unique:
@@ -303,6 +345,8 @@ def get_table_rows(table_name, engine, key, key_matches,
                    coerce_float=True, params=None,
                    parse_dates=None, chunksize=None,
                    column_names=None):
+    """
+    """
     if column_names is None:
         column_names = '*'
     else:
@@ -320,6 +364,8 @@ def get_table_rows(table_name, engine, key, key_matches,
 
 
 def key_chunks(engine, table_name, column_name, chunksize):
+    """
+    """
     vals = get_column_values(engine, table_name, column_name)
     i = 0
     while i < len(vals):

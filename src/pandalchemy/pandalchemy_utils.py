@@ -385,3 +385,48 @@ def table_chunks(engine, table_name, key, chunksize, column_names=None,
                              coerce_float=coerce_float,
                              params=params,
                              parse_dates=parse_dates)
+
+
+def update_insert(table_name, engine, records):
+    """Updates any key matched records
+       Inserts any new key records
+       Table must have primary key
+       records must all have table primary key entries
+       records is a list of dictionaries for each table row
+    """
+    key = utils.primary_key(table_name, engine)
+    if key is None:
+        raise AttributeError('table has no primary key')
+        
+    # get key values from records
+    key_vals = [record[key] for record in records]
+    
+    # find matches in table
+    bool_matches = utils.check_vals_exist(engine, table_name, key, key_vals)
+    matches_keys = filter_list(key_vals, bool_matches)
+    new_records_keys = reverse_filter(key_vals, bool_matches)
+    
+    match_records = [x for x in records if x[key] in matches_keys]
+    new_records = [x for x in records if x[key] in new_records_keys]
+    
+    Session = sa.orm.sessionmaker(engine)
+    session = Session()
+    mapper =  sa.inspect(utils.get_class(table_name, engine))
+    session.bulk_update_mappings(mapper, match_records)
+    session.bulk_insert_mappings(mapper, new_records)
+    session.commit()
+    session.close()
+
+
+def update_insert_df(table_name, engine, df, index_key=False):
+    """Updates and inserts rows from DataFrame into table
+       Must have column with same name as table primary key
+       If the DataFrame index is the primary key set index_key=True and
+       the DataFrame index name must match the primary key name
+    """
+    if index_key:
+        df = df.copy()
+        df[df.index.name] = df.index.values
+        
+    records = df.to_dict('records')
+    update_insert(table_name, engine, records)

@@ -387,6 +387,16 @@ def table_chunks(engine, table_name, key, chunksize, column_names=None,
                              parse_dates=parse_dates)
 
 
+def filter_list(a_list: list, bool_list: list):
+    # filter down a list by a True/False list
+    return [val for val, b in zip(a_list, bool_list) if b]
+
+
+def reverse_filter(a_list: list, bool_list: list):
+    bool_list = [False if x else True for x in bool_list]
+    return filter_list(a_list, bool_list)
+
+
 def update_insert(table_name, engine, records):
     """Updates any key matched records
        Inserts any new key records

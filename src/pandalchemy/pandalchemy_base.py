@@ -3,6 +3,9 @@ from pandalchemy.pandalchemy_utils import from_sql_keyindex, copy_table, get_col
 from pandalchemy.magration_functions import to_sql
 from pandalchemy.interfaces import IDataBase, ITable
 
+from pandalchemy import pandalchemy_utils as utils
+from pandalchemy.migration import add_column, add_primary_key
+
 from pandas import DataFrame
 from sqlalchemy.engine.base import Engine
 
@@ -246,7 +249,7 @@ class Table(BaseTable):
         return f"""Table(name={self.name}, key={self.key},
         {repr(self.data)})"""
 
-    # TODO: add lazy loading feature
+    # TODO: add lazy loading - feature
 
     def push(self, engine=None):
         """Check data for sql table rules
@@ -260,14 +263,26 @@ class Table(BaseTable):
             self.engine = engine
 
         if self.name in self.engine.table_names():
-            to_sql(self.data,
-                   self.name,
-                   self.engine,
-                   )
+            # check if sql table has primary key
+            if primary_key(self.name, self.engine) is None:
+                if self.data.index.name is None:
+                    if self.key is None:
+                        self.data.index.name = 'id'
+                        self.key = 'id'
+                    else:
+                        self.data.index.name = self.key
+                # Without a primary key, we cannot do anything efficiently
+                # Current solution is to completely replace old table
+                to_sql_k(self.data, self.name, self.engine, if_exists='replace', keys=self.key)
+            else:
+                to_sql(self.data,
+                       self.name,
+                       self.engine,
+                      )
         else:
             self.key = self.data.index.name
             if self.key is None:
-                to_sql_k(self.data, self.name, engine, keys='index')
+                to_sql_k(self.data, self.name, engine, keys='id')
             else:
                 to_sql_k(self.data, self.name, engine, keys=self.key)
 

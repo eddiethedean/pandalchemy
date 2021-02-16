@@ -404,7 +404,7 @@ def update_insert(table_name, engine, records):
        records must all have table primary key entries
        records is a list of dictionaries for each table row
     """
-    key = utils.primary_key(table_name, engine)
+    key = primary_key(table_name, engine)
     if key is None:
         raise AttributeError('table has no primary key')
         
@@ -412,7 +412,7 @@ def update_insert(table_name, engine, records):
     key_vals = [record[key] for record in records]
     
     # find matches in table
-    bool_matches = utils.check_vals_exist(engine, table_name, key, key_vals)
+    bool_matches = check_vals_exist(engine, table_name, key, key_vals)
     matches_keys = filter_list(key_vals, bool_matches)
     new_records_keys = reverse_filter(key_vals, bool_matches)
     
@@ -421,7 +421,7 @@ def update_insert(table_name, engine, records):
     
     Session = sa.orm.sessionmaker(engine)
     session = Session()
-    mapper =  sa.inspect(utils.get_class(table_name, engine))
+    mapper =  sa.inspect(get_class(table_name, engine))
     session.bulk_update_mappings(mapper, match_records)
     session.bulk_insert_mappings(mapper, new_records)
     session.commit()

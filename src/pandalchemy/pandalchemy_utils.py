@@ -2,7 +2,7 @@ import pandas as pd
 import sqlalchemy as sa
 import numpy as np
 
-from sqlalchemy import Integer, String, DateTime, MetaData, Table
+from sqlalchemy import Integer, String, DateTime, MetaData
 from sqlalchemy.ext.automap import automap_base
 from sqlalchemy import Float, Boolean, func
 from sqlalchemy.orm import sessionmaker
@@ -45,25 +45,25 @@ def from_sql_keyindex(table_name, con, schema=None,
                       columns=None, chunksize=None):
     """Pull sql table into a DataFrame with index of table's primary key
     """
-    key = primary_key(table_name, con)
+    key = primary_key(table_name, con, schema=schema)
     return pd.read_sql_table(table_name=table_name, con=con, schema=schema,
                              index_col=key, coerce_float=coerce_float,
                              parse_dates=parse_dates, columns=columns,
                              chunksize=chunksize)
 
-def tables_data_equal(t1, t2):
+def tables_data_equal(t1, t2, t1_schema=None, t2_schema=None):
     """Check if tables have same table_name,
     columns, relationships, and data
     """
     # data
-    df1 = pd.read_sql(t1.name, t1.metadata.bind)
-    df2 = pd.read_sql(t2.name, t2.metadata.bind)
+    df1 = pd.read_sql(t1.name, t1.metadata.bind, schema=t1_schema)
+    df2 = pd.read_sql(t2.name, t2.metadata.bind, schema=t2_schema)
     if not df1.equals(df2):
         return False
     return True
     
 
-def tables_metadata_equal(t1, t2):
+def tables_metadata_equal(t1, t2, t1_schema=None, t2_schema=None):
     """Check if tables have same table_name,
     columns, relationships, and data
     """
@@ -72,8 +72,8 @@ def tables_metadata_equal(t1, t2):
         return False
     # columns
     # Check if each column name exists and has same data_type, attributes
-    col_names1 = set(get_col_names(t1))
-    col_names2 = set(get_col_names(t2))
+    col_names1 = set(get_col_names(t1, schema=t1_schema))
+    col_names2 = set(get_col_names(t2, schema=t2_schema))
     if col_names1 != col_names2:
         return False
     for name in col_names1:
@@ -82,13 +82,13 @@ def tables_metadata_equal(t1, t2):
     return True
 
 
-def get_col_names(table, engine=None, name=None):
+def get_col_names(table, engine=None, name=None, schema=None):
     """
     """
     if type(table) is str:
         name = table
     if name and engine:
-        table = get_table(name, engine)
+        table = get_table(name, engine, schema=schema)
     return [c.name for c in table.columns]
 
 
@@ -107,57 +107,57 @@ def get_type(df, col_name):
     return String
 
 
-def get_class(name, engine):
+def get_class(name, engine, schema=None):
     """
     """
-    metadata = sa.MetaData(engine)
+    metadata = sa.MetaData(engine, schema=schema)
     metadata.reflect(engine, only=[name])
     Base = automap_base(metadata=metadata)
     Base.prepare()
     return Base.classes[name]
 
 
-def get_col_types(name, engine):
+def get_col_types(name, engine, schema=None):
     """Returns dict of table column names:data_type
     """
     md = sa.MetaData()
-    table = sa.Table(name, md, autoload=True, autoload_with=engine)
+    table = sa.Table(name, md, autoload=True, autoload_with=engine, schema=schema)
     return {c.name: c.type for c in table.c}
 
 
-def list_of_tables(engine):
+def list_of_tables(engine, schema=None):
     """
     """
-    return [(name, pd.read_sql(name, con=engine))
-            for name in engine.table_names()]
+    return [(name, pd.read_sql(name, con=engine, schema=schema))
+            for name in engine.table_names(schema=schema)]
 
 
-def has_primary_key(table_name, engine):
+def has_primary_key(table_name, engine, schema=None):
     """
     """
-    meta = sa.MetaData()
-    table = sa.Table(table_name, meta, autoload=True, autoload_with=engine)
+    meta = sa.MetaData(bind=engine, schema=schema)
+    table = sa.Table(table_name, meta, autoload=True, autoload_with=engine, schema=schema)
     k = table.primary_key.columns.values()
     if len(k) == 0:
         return False
     return True
 
  
-def primary_key(table_name, engine):
+def primary_key(table_name, engine, schema=None):
     """
     """
-    meta = sa.MetaData()
-    table = sa.Table(table_name, meta, autoload=True, autoload_with=engine)
+    meta = sa.MetaData(bind=engine, schema=schema, )
+    table = sa.Table(table_name, meta, autoload=True, autoload_with=engine, schema=schema)
     k = table.primary_key.columns.values()
-    if has_primary_key(table_name, engine):
+    if has_primary_key(table_name, engine, schema=schema):
         return k[0].name
     return None
 
-def get_table(name, engine):
+def get_table(name, engine, schema=None):
     """
     """
-    metadata = MetaData(engine)
-    return sa.Table(name, metadata, autoload=True, autoload_with=engine)
+    metadata = MetaData(bind=engine, schema=schema)
+    return sa.Table(name, metadata, autoload=True, autoload_with=engine, schema=schema)
 
 
 def get_column(table, column_name):
@@ -166,29 +166,29 @@ def get_column(table, column_name):
     return table.c[column_name]
 
 
-def col_name_exists(engine, table_name, col_name):
+def col_name_exists(engine, table_name, col_name, schema=None):
     """
     """
-    return col_name in get_col_names(get_table(table_name, engine))
+    return col_name in get_col_names(get_table(table_name, engine, schema=schema), schema=schema)
 
 
-def get_column_values(engine, table_name, column_name):
+def get_column_values(engine, table_name, column_name, schema=None):
     """
     """
     Session = sessionmaker(engine)
     session = Session()
-    tbl = get_table(table_name, engine)
+    tbl = get_table(table_name, engine, schema=schema)
     vals = session.query(tbl.c[column_name]).all()
     #vals = engine.execute(f'select {column_name} from {table_name}').fetchall()
     return [val[0] for val in vals]
 
 
-def check_vals_exist(engine, table_name, column_name, vals):
+def check_vals_exist(engine, table_name, column_name, vals, schema=None):
     """
     """
     Session = sessionmaker(engine)
     session = Session()
-    tbl = get_table(table_name, engine)
+    tbl = get_table(table_name, engine, schema=schema)
     col = tbl.c[column_name]
     
     out = list()
@@ -206,12 +206,12 @@ def check_vals_exist(engine, table_name, column_name, vals):
     return out
 
 
-def check_val_exist(engine, table_name, column_name, val):
+def check_val_exist(engine, table_name, column_name, val, schema=None):
     """
     """
     Session = sessionmaker(engine)
     session = Session()
-    tbl = get_table(table_name, engine)
+    tbl = get_table(table_name, engine, schema=schema)
     col = tbl.c[column_name]
     my_case_stmt = case([(col.in_([val]), True)])
     score = session.query(func.sum(my_case_stmt)).scalar()
@@ -222,43 +222,48 @@ def check_val_exist(engine, table_name, column_name, val):
         return False
 
 
-def delete_rows(table_name, engine, col_name, vals):
+def delete_rows(table_name, engine, col_name, vals, schema=None):
     """
     """
     Session = sessionmaker(engine)
     session = Session()
-    tbl = get_table(table_name, engine)
+    tbl = get_table(table_name, engine, schema=schema)
     col = tbl.c[col_name]
     session.query(tbl).filter(col.in_(vals)).delete(synchronize_session=False)
     session.commit()
     session.close()
 
 
-def update_table(df, table_name, engine, key, index=False):
+def update_table(df, table_name, engine, key, index=False, schema=None):
     """
     """
     matches_bool = check_vals_exist(engine,
                                      table_name,
                                      key,
-                                     df[key])
+                                     df[key],
+                                     schema=schema)
     matches = df[key][matches_bool]
-    delete_rows(table_name, engine, key, matches)
-    df.to_sql(table_name, engine, if_exists='append', index=index)
+    delete_rows(table_name, engine, key, matches, schema=schema)
+    df.to_sql(table_name, engine, if_exists='append', index=index, schema=schema)
 
 
-def copy_table(src_engine, src_name, dest_name, dest_engine=None):
+def copy_table(src_engine, src_name, dest_name, dest_engine=None, schema=None, dest_schema=None):
     """
     """
     if dest_engine is None:
         dest_engine = src_engine
+
+    if dest_engine is None:
+        dest_engine = schema
+
     # reflect existing columns, and create table object for oldTable
-    src_engine._metadata = MetaData(bind=src_engine)
+    src_engine._metadata = MetaData(bind=src_engine, schema=schema)
     src_engine._metadata.reflect(src_engine) # get columns from existing table
-    srcTable = Table(src_name, src_engine._metadata)
+    srcTable = sa.Table(src_name, src_engine._metadata, schema=schema)
 
     # create engine and table object for newTable
-    dest_engine._metadata = MetaData(bind=dest_engine)
-    destTable = Table(dest_name, dest_engine._metadata)
+    dest_engine._metadata = MetaData(bind=dest_engine, schema=dest_schema)
+    destTable = sa.Table(dest_name, dest_engine._metadata, schema=dest_schema)
 
     # copy schema and create newTable from oldTable
     for column in srcTable.columns:
@@ -279,25 +284,25 @@ def copy_table(src_engine, src_name, dest_name, dest_engine=None):
 
 
 
-def add_primary_key(table_name, engine, column_name):
+def add_primary_key(table_name, engine, column_name, schema=None):
     """
     """
     # reflect existing columns, and create table object for oldTable
-    engine._metadata = MetaData(bind=engine)
+    engine._metadata = MetaData(bind=engine, schema=schema)
     engine._metadata.reflect(engine) # get columns from existing table
-    srcTable = Table(table_name, engine._metadata)
+    srcTable = sa.Table(table_name, engine._metadata, schema=schema)
 
     temp_name = table_name + '__temp__'
 
     # create engine and table object for newTable
-    engine._metadata = MetaData(bind=engine)
-    destTable = Table(temp_name, engine._metadata)
+    engine._metadata = MetaData(bind=engine, schema=schema)
+    destTable = sa.Table(temp_name, engine._metadata, schema=schema)
 
     # copy schema and create newTable from oldTable
     for column in srcTable.columns:
         destTable.append_column(column.copy())
     destTable.append_column(sa.PrimaryKeyConstraint(column_name, name=column_name))
-    destTable.create()  
+    destTable.create()
 
     SrcSession = sessionmaker(engine)
     session = SrcSession()
@@ -312,21 +317,20 @@ def add_primary_key(table_name, engine, column_name):
     dest_session.close()
 
     # delete old table
-    get_table(table_name, engine).drop()
+    get_table(table_name, engine, schema=schema).drop()
     # copy new table to old table name
-    copy_table(engine, temp_name, table_name)
+    copy_table(engine, temp_name, table_name, schema=schema)
     # delete temp table
-    get_table(temp_name, engine).drop()
+    get_table(temp_name, engine, schema=schema).drop()
 
 
-
-def get_row_count(table_name, engine):
+def get_row_count(table_name, engine, schema=None):
     """
     """
     Session = sessionmaker(engine)
     session = Session()
-    tbl = get_table(table_name, engine)
-    cols = get_col_names(tbl)
+    tbl = get_table(table_name, engine, schema=schema)
+    cols = get_col_names(tbl,schema=schema)
     col = get_column(tbl, cols[0])
     return session.query(func.count(col)).scalar()
 
@@ -344,7 +348,7 @@ def df_sql_check(df):
 def get_table_rows(table_name, engine, key, key_matches,
                    coerce_float=True, params=None,
                    parse_dates=None, chunksize=None,
-                   column_names=None):
+                   column_names=None, schema=None):
     """
     """
     if column_names is None:
@@ -360,13 +364,14 @@ def get_table_rows(table_name, engine, key, key_matches,
                              coerce_float=coerce_float,
                              params=params,
                              parse_dates=parse_dates,
-                             chunksize=chunksize)
+                             chunksize=chunksize,
+                             schema=schema)
 
 
-def key_chunks(engine, table_name, column_name, chunksize):
+def key_chunks(engine, table_name, column_name, chunksize, schema=None):
     """
     """
-    vals = get_column_values(engine, table_name, column_name)
+    vals = get_column_values(engine, table_name, column_name, schema=schema)
     i = 0
     while i < len(vals):
         yield vals[i:i+chunksize]
@@ -374,17 +379,18 @@ def key_chunks(engine, table_name, column_name, chunksize):
 
 
 def table_chunks(engine, table_name, key, chunksize, column_names=None,
-                 coerce_float=True, params=None, parse_dates=None):
+                 coerce_float=True, params=None, parse_dates=None, schema=None):
     """Generator function -> [pd.DataFrame]
     Pulls pandas DataFrame chunks from sql table
     Doesn't lock up sqlite database
     """
-    for keys in key_chunks(engine, table_name, key, chunksize):
+    for keys in key_chunks(engine, table_name, key, chunksize, schema=schema):
         yield get_table_rows(table_name, engine, key, keys,
                              column_names=column_names,
                              coerce_float=coerce_float,
                              params=params,
-                             parse_dates=parse_dates)
+                             parse_dates=parse_dates,
+                             schema=schema)
 
 
 def filter_list(a_list: list, bool_list: list):
@@ -397,14 +403,14 @@ def reverse_filter(a_list: list, bool_list: list):
     return filter_list(a_list, bool_list)
 
 
-def update_insert(table_name, engine, records):
+def update_insert(table_name, engine, records, schema=None):
     """Updates any key matched records
        Inserts any new key records
        Table must have primary key
        records must all have table primary key entries
        records is a list of dictionaries for each table row
     """
-    key = primary_key(table_name, engine)
+    key = primary_key(table_name, engine, schema=schema)
     if key is None:
         raise AttributeError('table has no primary key')
         
@@ -412,7 +418,7 @@ def update_insert(table_name, engine, records):
     key_vals = [record[key] for record in records]
     
     # find matches in table
-    bool_matches = check_vals_exist(engine, table_name, key, key_vals)
+    bool_matches = check_vals_exist(engine, table_name, key, key_vals, schema=schema)
     matches_keys = filter_list(key_vals, bool_matches)
     new_records_keys = reverse_filter(key_vals, bool_matches)
     
@@ -421,14 +427,14 @@ def update_insert(table_name, engine, records):
     
     Session = sa.orm.sessionmaker(engine)
     session = Session()
-    mapper =  sa.inspect(get_class(table_name, engine))
+    mapper =  sa.inspect(get_class(table_name, engine, schema=schema))
     session.bulk_update_mappings(mapper, match_records)
     session.bulk_insert_mappings(mapper, new_records)
     session.commit()
     session.close()
 
 
-def update_insert_df(table_name, engine, df, index_key=False):
+def update_insert_df(table_name, engine, df, index_key=False, schema=None):
     """Updates and inserts rows from DataFrame into table
        Must have column with same name as table primary key
        If the DataFrame index is the primary key set index_key=True and
@@ -437,6 +443,6 @@ def update_insert_df(table_name, engine, df, index_key=False):
     if index_key:
         df = df.copy()
         df[df.index.name] = df.index.values
-        
+
     records = df.to_dict('records')
-    update_insert(table_name, engine, records)
+    update_insert(table_name, engine, records, schema=schema)

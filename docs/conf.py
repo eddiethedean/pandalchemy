@@ -26,7 +26,7 @@ try:
     version = release = get_distribution('pandalchemy').version
 except Exception:
     traceback.print_exc()
-    version = release = '0.1.7'
+    version = release = '0.1.8'
 
 pygments_style = 'trac'
 templates_path = ['.']

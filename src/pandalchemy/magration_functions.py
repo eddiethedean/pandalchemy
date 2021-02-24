@@ -5,7 +5,7 @@ from pandalchemy.pandalchemy_utils import get_table, get_type, get_class, has_pr
 from pandalchemy.pandalchemy_utils import col_name_exists, add_primary_key
 
 
-def to_sql(df, name, engine):
+def to_sql(df, name, engine, schema=None):
     """Drops all rows then uses bulk_insert_mappings to add data back
     """
     df = df.copy()
@@ -17,18 +17,19 @@ def to_sql(df, name, engine):
     Session = sa.orm.sessionmaker(bind=engine)
     session = Session()
     metadata = sa.MetaData(engine)
-    tbl = sa.Table(name, metadata, autoload=True, autoload_with=engine)
+    tbl = sa.Table(name, metadata, autoload=True, autoload_with=engine, schema=schema)
 
     # If table has no primary key, add it to column
-    if not has_primary_key(name, engine):
+    if not has_primary_key(name, engine, schema=schema):
         # If table primary key col doesn't exist
-        if not col_name_exists(engine, name, key):
+        if not col_name_exists(engine, name, key, schema=schema):
             add_column(tbl,
                        key,
-                       get_type(df, key))
+                       get_type(df, key)
+                       )
 
     metadata = sa.MetaData(engine)
-    tbl = sa.Table(name, metadata, autoload=True, autoload_with=engine)
+    tbl = sa.Table(name, metadata, autoload=True, autoload_with=engine, schema=schema)
 
     # Delete data, leave table columns
     engine.execute(tbl.delete(None))
@@ -41,7 +42,7 @@ def to_sql(df, name, engine):
     if len(new_to_add) > 0:
         for col_name in new_to_add:
             # Need to calculate type based on DataFrame col type
-            add_column(get_table(name, engine),
+            add_column(get_table(name, engine, schema=schema),
                        col_name,
                        get_type(df, col_name))
     # Delete any missing columns
@@ -53,9 +54,10 @@ def to_sql(df, name, engine):
     # to_sql_k(df, name, engine, index=False, if_exists='replace', keys=key)
     #df.to_sql(name, engine, index=False, if_exists='append', keys=key)
     if not has_primary_key(name, engine):
-        tbl = sa.Table(name, metadata, autoload=True, autoload_with=engine)
-        add_primary_key(tbl, engine, key)
-    session.bulk_insert_mappings(get_class(name, engine),
-                                 df.to_dict(orient="records"))
+        tbl = sa.Table(name, metadata, autoload=True, autoload_with=engine, schema=schema)
+        add_primary_key(tbl, engine, key, schema=schema)
+    session.bulk_insert_mappings(get_class(name, engine, schema=schema),
+                                 df.to_dict(orient="records")
+                                 )
     session.commit()
     

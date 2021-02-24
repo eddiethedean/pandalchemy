@@ -15,10 +15,11 @@ class DataBase(IDataBase):
        Needs to connect to a database to push changes
        push method changes database with sql
     """
-    def __init__(self, engine, lazy=False):
+    def __init__(self, engine, lazy=False, schema=None):
         """
         """
         self.engine = engine
+        self.schema = schema
         # lazy loading stops all tables from getting loaded into memory
         # until table is accessed
         self.lazy = lazy
@@ -27,7 +28,7 @@ class DataBase(IDataBase):
                                    engine=engine,
                                    db=self
                                    )
-                       for name in engine.table_names()
+                       for name in engine.table_names(schema=self.schema)
                       }
         else:
             self.db = {name:None for name in engine.table_names()}
@@ -37,7 +38,7 @@ class DataBase(IDataBase):
         """
         if self.lazy:
             # load table into memory
-            self.db[key] = Table(key, engine=self.engine)
+            self.db[key] = Table(key, engine=self.engine, schema=self.schema)
         return self.db[key]
 
     def __setitem__(self, key, value):
@@ -73,13 +74,13 @@ class DataBase(IDataBase):
         """
         for tbl in self.db.values():
             if tbl is not None:
-                tbl.push(self.engine)
-        self.__init__(self.engine, lazy=self.lazy)
+                tbl.push(self.engine, self.schema)
+        self.__init__(self.engine, lazy=self.lazy, schema=self.schema)
 
     def pull(self):
         """updates DataBase object with current database data
         """
-        self.__init__(self.engine, lazy=self.lazy)
+        self.__init__(self.engine, lazy=self.lazy, schema=self.schema)
 
     # TODO drop_table method
 
@@ -89,6 +90,7 @@ class DataBase(IDataBase):
         self.db[table.name] = table
         table.db = self
         table.engine = self.engine
+        table.schema = self.schema
         if push:
             self.push()
 
@@ -98,7 +100,7 @@ class BaseTable(ITable):
     """
     def __init__(self, name, data=None, key=None,
                  f_keys=[], types=dict(), engine=None,
-                 db=None):
+                 db=None, schema=None):
         self.name = name
         self.key = key
         self.f_keys = f_keys
@@ -106,6 +108,7 @@ class BaseTable(ITable):
         self.engine = engine
         self.data = data
         self.db = db
+        self.schema = schema
 
         if isinstance(self.data, Engine):
             self.engine = self.data
@@ -114,8 +117,8 @@ class BaseTable(ITable):
         if isinstance(self.engine, Engine):
             # If engine provided and no key: set key to existing table key
             if self.key is None:
-                if self.name in self.engine.table_names():
-                    self.key = primary_key(self.name, self.engine)
+                if self.name in self.engine.table_names(self.schema):
+                    self.key = primary_key(self.name, self.engine, self.schema)
             else:
                 pass # 
             # If engine and data provided: 
@@ -124,7 +127,8 @@ class BaseTable(ITable):
             else:
                 # pull data down from table
                 self.data = from_sql_keyindex(self.name,
-                                              self.engine)
+                                              self.engine,
+                                              self.schema)
         # If no engine provided but data is:
         elif self.data is not None:
             
@@ -164,7 +168,8 @@ class BaseTable(ITable):
                 'f_keys':self.f_keys,
                 'types':self.types,
                 'engine':self.engine,
-                'db':self.db}
+                'db':self.db,
+                'schema':self.schema}
 
     @property
     def shape(self):
@@ -251,7 +256,7 @@ class Table(BaseTable):
 
     # TODO: add lazy loading - feature
 
-    def push(self, engine=None):
+    def push(self, engine=None, schema=None):
         """Check data for sql table rules
         """
         if not self.data.index.is_unique:
@@ -262,9 +267,12 @@ class Table(BaseTable):
         if engine is not None:
             self.engine = engine
 
-        if self.name in self.engine.table_names():
+        if schema is not None:
+            self.schema = schema
+
+        if self.name in self.engine.table_names(schema=self.schema):
             # check if sql table has primary key
-            if primary_key(self.name, self.engine) is None:
+            if primary_key(self.name, self.engine, self.schema) is None:
                 if self.data.index.name is None:
                     if self.key is None:
                         self.data.index.name = 'id'
@@ -273,48 +281,65 @@ class Table(BaseTable):
                         self.data.index.name = self.key
                 # Without a primary key, we cannot do anything efficiently
                 # Current solution is to completely replace old table
-                to_sql_k(self.data, self.name, self.engine, if_exists='replace', keys=self.key)
+                to_sql_k(self.data, self.name, self.engine,
+                         if_exists='replace', keys=self.key, schema=self.schema)
             else:
                 to_sql(self.data,
                        self.name,
                        self.engine,
+                       self.schema
                       )
         else:
             self.key = self.data.index.name
             if self.key is None:
-                to_sql_k(self.data, self.name, engine, keys='id')
+                to_sql_k(self.data, self.name, engine, keys='id', schema=self.schema)
             else:
-                to_sql_k(self.data, self.name, engine, keys=self.key)
+                to_sql_k(self.data, self.name, engine, keys=self.key, schema=self.schema)
 
-        self.__init__(self.name, engine=self.engine)
+        self.__init__(self.name, engine=self.engine, schema=self.schema)
 
-    def pull(self, engine=None):
+    def pull(self, engine=None, schema=None):
         """
         """
         if engine is not None:
             self.engine = engine
 
+        if schema is not None:
+            self.schema = schema
+
         self.__init__(self.name, self.data, self.key, self.f_keys,
-                      self.types, self.engine, self.db)
+                      self.types, self.engine, self.db, self.schema)
 
-    def copy_push(self, new_name, engine=None):
+    def copy_push(self, new_name, engine=None, schema=None):
         """
         """
         if engine is not None:
             target_engine = engine
         else:
             target_engine = self.engine
-        copy_table(self.engine, self.name, new_name, target_engine)
 
-    def copy(self, new_name, engine=None):
+        if schema is not None:
+            target_schema = schema
+        else:
+            target_schema = self.schema
+
+        copy_table(self.engine, self.name, new_name, target_engine, target_schema)
+
+    def copy(self, new_name, engine=None, schema=None):
         """
         """
         if engine is not None:
             target_engine = engine
         else:
             target_engine = self.engine
-        self.copy_push(new_name, engine=target_engine)
-        return Table(new_name, engine=target_engine)
+
+        if schema is not None:
+            target_schema = schema
+        else:
+            target_schema = self.schema
+
+        self.copy_push(new_name, engine=target_engine, schema=target_schema)
+        return Table(new_name, engine=target_engine, schema=target_schema)
 
     def drop_col(self, col_name):
         """
@@ -332,10 +357,10 @@ class SubTable(BaseTable):
     """
     # TODO: make __init__ set index as key or index
     def __init__(self, name, data=None, key=None, f_keys=[],
-                 types=dict(), engine=None, db=None):
+                 types=dict(), engine=None, db=None, schema=None):
         BaseTable.__init__(self, name, data=data, key=key,
                            f_keys=f_keys, types=types,
-                           engine=engine, db=db)
+                           engine=engine, db=db, schema=schema)
 
     def __repr__(self):
         """
@@ -346,11 +371,14 @@ class SubTable(BaseTable):
     # TODO: add copy_push method
     # TODO: add copy method
     
-    def push(self, engine=None):
+    def push(self, engine=None, schema=None):
         """
         """
         if engine is not None:
             self.engine = engine
+
+        if schema is not None:
+            self.schema = schema
 
         self.data[self.index.name] = self.data.index 
         # TODO: Check for missing columns
@@ -368,9 +396,10 @@ class SubTable(BaseTable):
                      self.name,
                      self.engine,
                      self.key,
-                     index=False)
+                     index=False,
+                     schema=self.schema)
 
-        self.__init__(self.name, engine=self.engine)
+        self.__init__(self.name, engine=self.engine, schema=self.schema)
         # update parent Table with SubTable changes
         #if self.db is not None and self.name in self.db:
             #self.db[self.name].pull(self.engine)
@@ -383,10 +412,10 @@ class SubTable(BaseTable):
 
 
 def sub_tables(table, chunksize, column_names=None, coerce_float=True,
-                              params=None, parse_dates=None):
+                              params=None, parse_dates=None, schema=None):
     """
     """
     for chunk in table_chunks(table.engine, table.name, table.key, chunksize,
                               column_names=column_names, coerce_float=coerce_float,
-                              params=params, parse_dates=parse_dates):
+                              params=params, parse_dates=parse_dates, schema=schema):
         yield SubTable(**table._init(chunk))

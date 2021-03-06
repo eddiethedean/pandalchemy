@@ -6,7 +6,8 @@ from sqlalchemy import Integer, String, DateTime, MetaData
 from sqlalchemy.ext.automap import automap_base
 from sqlalchemy import Float, Boolean, func
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import func, case
+from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert
 
 
 def to_sql_k(df, name, con, if_exists='fail', index=True,
@@ -50,6 +51,7 @@ def from_sql_keyindex(table_name, con, schema=None,
                              index_col=key, coerce_float=coerce_float,
                              parse_dates=parse_dates, columns=columns,
                              chunksize=chunksize)
+
 
 def tables_data_equal(t1, t2, t1_schema=None, t2_schema=None):
     """Check if tables have same table_name,
@@ -153,6 +155,7 @@ def primary_key(table_name, engine, schema=None):
         return k[0].name
     return None
 
+
 def get_table(name, engine, schema=None):
     """
     """
@@ -160,9 +163,11 @@ def get_table(name, engine, schema=None):
     return sa.Table(name, metadata, autoload=True, autoload_with=engine, schema=schema)
 
 
-def get_column(table, column_name):
+def get_column(table, column_name, engine=None, schema=None):
     """
     """
+    if type(table) is str:
+        table = get_table(table, engine, schema)
     return table.c[column_name]
 
 
@@ -183,29 +188,6 @@ def get_column_values(engine, table_name, column_name, schema=None):
     return [val[0] for val in vals]
 
 
-def check_vals_exist(engine, table_name, column_name, vals, schema=None):
-    """
-    """
-    Session = sessionmaker(engine)
-    session = Session()
-    tbl = get_table(table_name, engine, schema=schema)
-    col = tbl.c[column_name]
-    
-    out = list()
-    for val in vals:
-        my_case_stmt = case(
-            [
-                (col.in_([val]), True)
-            ],
-            else_=False
-        )
-    
-        score = session.query(func.sum(my_case_stmt)).scalar()
-        out.append(score)
-    session.close()
-    return out
-
-
 def check_val_exist(engine, table_name, column_name, val, schema=None):
     """
     """
@@ -213,13 +195,32 @@ def check_val_exist(engine, table_name, column_name, val, schema=None):
     session = Session()
     tbl = get_table(table_name, engine, schema=schema)
     col = tbl.c[column_name]
-    my_case_stmt = case([(col.in_([val]), True)])
-    score = session.query(func.sum(my_case_stmt)).scalar()
+
+    my_case_stmt = select([col]).where(col.in_([val]))
+    out = session.execute(my_case_stmt).fetchall()
     session.close()
-    if score:
-        return score
-    else:
-        return False
+    
+    out = [r[0] for r in out]
+    return val in out
+
+
+def check_vals_exist(engine, table_name, column_name, vals,
+                     return_vals=False, schema=None):
+    """
+    """
+    Session = sessionmaker(engine)
+    session = Session()
+    tbl = get_table(table_name, engine, schema=schema)
+    col = tbl.c[column_name]
+
+    my_case_stmt = select([col]).where(col.in_(vals))
+    out = session.execute(my_case_stmt).fetchall()
+    session.close()
+    
+    out = [r[0] for r in out]
+    if return_vals:
+        return out
+    return [True if val in out else False for val in vals]
 
 
 def delete_rows(table_name, engine, col_name, vals, schema=None):
@@ -281,7 +282,6 @@ def copy_table(src_engine, src_name, dest_name, dest_engine=None, schema=None, d
     dest_session.commit()
     session.close()
     dest_session.close()
-
 
 
 def add_primary_key(table_name, engine, column_name, schema=None):
@@ -446,3 +446,11 @@ def update_insert_df(table_name, engine, df, index_key=False, schema=None):
 
     records = df.to_dict('records')
     update_insert(table_name, engine, records, schema=schema)
+
+
+def df_to_sql_on_conflict_do_nothing(df, engine, table_name, primary_key, schema=None):
+    insert_values = df.to_dict(orient='records')
+    table = get_table(table_name, engine, schema)
+    insert_statement = insert(table).values(insert_values)
+    do_nothing_statement = insert_statement.on_conflict_do_nothing(index_elements=[primary_key])
+    return engine.execute(do_nothing_statement)

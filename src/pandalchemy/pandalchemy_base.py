@@ -1,6 +1,6 @@
 from pandalchemy.pandalchemy_utils import primary_key, to_sql_k, update_table, table_chunks
 from pandalchemy.pandalchemy_utils import from_sql_keyindex, copy_table, get_col_names
-from pandalchemy.magration_functions import to_sql
+from pandalchemy.magration_functions import update_sql_with_df
 from pandalchemy.interfaces import IDataBase, ITable
 
 from pandalchemy import pandalchemy_utils as utils
@@ -284,11 +284,11 @@ class Table(BaseTable):
                 to_sql_k(self.data, self.name, self.engine,
                          if_exists='replace', keys=self.key, schema=self.schema)
             else:
-                to_sql(self.data,
-                       self.name,
-                       self.engine,
-                       self.schema
-                      )
+                update_sql_with_df(self.data,
+                                   self.name,
+                                   self.engine,
+                                   self.schema
+                                  )
         else:
             self.key = self.data.index.name
             if self.key is None:

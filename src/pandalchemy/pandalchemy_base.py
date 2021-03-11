@@ -4,7 +4,6 @@ from pandalchemy.magration_functions import update_sql_with_df
 from pandalchemy.interfaces import IDataBase, ITable
 
 from pandalchemy import pandalchemy_utils as utils
-from pandalchemy.migration import add_column, add_primary_key
 
 from pandas import DataFrame
 from sqlalchemy.engine.base import Engine
@@ -275,13 +274,20 @@ class Table(BaseTable):
             if primary_key(self.name, self.engine, self.schema) is None:
                 if self.data.index.name is None:
                     if self.key is None:
+                        if 'id' in self.data.columns:
+                            self.data.set_index('id', inplace=True)
                         self.data.index.name = 'id'
                         self.key = 'id'
                     else:
                         self.data.index.name = self.key
+                else:
+                    if self.key is None:
+                        self.key = self.data.index.name
+                    else:
+                        self.index.name = self.key
                 # Without a primary key, we cannot do anything efficiently
                 # Current solution is to completely replace old table
-                to_sql_k(self.data, self.name, self.engine,
+                to_sql_k(self.data, self.name, self.engine, index=True,
                          if_exists='replace', keys=self.key, schema=self.schema)
             else:
                 update_sql_with_df(self.data,

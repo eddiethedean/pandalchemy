@@ -454,3 +454,30 @@ def df_to_sql_on_conflict_do_nothing(df, engine, table_name, primary_key, schema
     insert_statement = insert(table).values(insert_values)
     do_nothing_statement = insert_statement.on_conflict_do_nothing(index_elements=[primary_key])
     return engine.execute(do_nothing_statement)
+
+
+def divide_chunks(l, n):  
+    for i in range(0, len(l), n):  
+        yield l[i:i + n] 
+
+
+def insert_df(df, engine, table_name, schema=None, chunk_size=500):
+    '''Table and columns must already exist.
+       Use this if table has no primary key.'''
+    records = df.to_dict('records')
+    table = get_table(table_name, engine, schema=schema)
+    for chunk in divide_chunks(records, chunk_size):
+        sql = table.insert().values(chunk)
+        engine.execute(sql)
+
+
+def insert_df_k(df, engine, table_name, schema=None):
+    '''Table and columns must already exist.
+       Use this if table has primary key.'''
+    records = df.to_dict('records')
+    Session = sa.orm.sessionmaker(engine)
+    session = Session()
+    mapper =  sa.inspect(get_class(table_name, engine, schema=schema))
+    session.bulk_insert_mappings(mapper, records)
+    session.commit()
+    session.close()

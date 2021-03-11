@@ -17,8 +17,8 @@ def delete_column(table, name):
     col.drop(table)
 
 
-def add_primary_key(table, name, engine):
-    """
-    """
-    cons = PrimaryKeyConstraint(name, table=table)
-    cons.create()
+#def add_primary_key(table, column_name):
+    #"""
+    #"""
+    #cons = PrimaryKeyConstraint(column_name, table=table)
+    #cons.create()

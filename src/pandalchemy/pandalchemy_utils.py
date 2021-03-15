@@ -473,11 +473,12 @@ def insert_df(df, engine, table_name, schema=None, chunk_size=500):
 
 def insert_df_k(df, engine, table_name, schema=None):
     '''Table and columns must already exist.
-       Use this if table has primary key.'''
+       Table MUST have primary key.
+       Faster than insert_df because of primary key.'''
     records = df.to_dict('records')
     Session = sa.orm.sessionmaker(engine)
     session = Session()
-    mapper =  sa.inspect(get_class(table_name, engine, schema=schema))
+    mapper = sa.inspect(get_class(table_name, engine, schema=schema))
     session.bulk_insert_mappings(mapper, records)
     session.commit()
     session.close()

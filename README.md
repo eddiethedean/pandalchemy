@@ -29,6 +29,7 @@ pip install pandalchemy
 - [sqlalchemy==1.3.18](https://pypi.org/project/SQLAlchemy/1.3.18/)
 - [sqlalchemy-migrate](https://sqlalchemy-migrate.readthedocs.io/en/latest/)
 - [numpy](https://numpy.org/)
+- [tabulate] 
         
 # Example code
 ```sh

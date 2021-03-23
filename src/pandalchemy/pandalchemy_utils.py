@@ -1,6 +1,7 @@
 import pandas as pd
 import sqlalchemy as sa
 import numpy as np
+from tabulate import tabulate
 
 from sqlalchemy import Integer, String, DateTime, MetaData
 from sqlalchemy.ext.automap import automap_base
@@ -482,3 +483,30 @@ def insert_df_k(df, engine, table_name, schema=None):
     session.bulk_insert_mappings(mapper, records)
     session.commit()
     session.close()
+
+
+def rep_table(table_name, engine, schema=None):
+   types = get_col_types(table_name, engine, schema=schema)
+   header = ('Column_Name', 'SQL_Data_Type', 'Pandas_Data_Type', 'First_Row_Value')
+   row_count = get_row_count(table_name, engine, schema=schema)
+   key = primary_key(table_name, engine, schema=schema)
+   first_row = None
+   for chunk in pd.read_sql_table(table_name, engine, schema=schema, chunksize=1):
+       first_row = chunk
+       break
+   if first_row is None:
+       first_row = pd.read_sql_table(table_name, engine, schema=schema)
+   p_dtypes = dict(first_row.dtypes)
+   if schema is not None:
+       name = schema + ' ' + table_name
+   else:
+       name = table_name
+   out = []
+   for (x, y), (i, r) in zip(types.items(), first_row.iteritems()):
+       z = p_dtypes[x]
+       if len(r) > 0:
+           out.append((x, y, z, r.iloc[0]))
+       else:
+           out.append((x, y, z))
+   return (f"""name={name}, primary_key{key}, row_count={row_count}""" +
+               tabulate(out, tablefmt='fancy_grid', headers=header))

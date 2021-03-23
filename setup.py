@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:
 setuptools.setup(
     name="pandalchemy",
     license='MIT',
-    version='0.1.11',
+    version='0.1.12',
     author="Odos Matthews",
     author_email="odosmatthews@gmail.com",
     description="A package that integrates pandas and sqlalchemy.",
@@ -25,7 +25,8 @@ setuptools.setup(
         'pandas',
         'sqlalchemy==1.3.18',
         'sqlalchemy-migrate',
-        'numpy'
+        'numpy',
+        'tabulate'
     ],
     entry_points={
         'console_scripts': [

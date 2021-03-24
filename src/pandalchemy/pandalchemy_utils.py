@@ -2,6 +2,7 @@ import pandas as pd
 import sqlalchemy as sa
 import numpy as np
 from tabulate import tabulate
+from IPython.core.display import display, HTML
 
 from sqlalchemy import Integer, String, DateTime, MetaData
 from sqlalchemy.ext.automap import automap_base
@@ -485,28 +486,63 @@ def insert_df_k(df, engine, table_name, schema=None):
     session.close()
 
 
-def rep_table(table_name, engine, schema=None):
-   types = get_col_types(table_name, engine, schema=schema)
-   header = ('Column_Name', 'SQL_Data_Type', 'Pandas_Data_Type', 'First_Row_Value')
-   row_count = get_row_count(table_name, engine, schema=schema)
-   key = primary_key(table_name, engine, schema=schema)
-   first_row = None
-   for chunk in pd.read_sql_table(table_name, engine, schema=schema, chunksize=1):
-       first_row = chunk
-       break
-   if first_row is None:
-       first_row = pd.read_sql_table(table_name, engine, schema=schema)
-   p_dtypes = dict(first_row.dtypes)
-   if schema is not None:
-       name = schema + ' ' + table_name
-   else:
-       name = table_name
-   out = []
-   for (x, y), (i, r) in zip(types.items(), first_row.iteritems()):
-       z = p_dtypes[x]
-       if len(r) > 0:
-           out.append((x, y, z, r.iloc[0]))
-       else:
-           out.append((x, y, z))
-   return (f"""name={name}, primary_key{key}, row_count={row_count}""" +
-               tabulate(out, tablefmt='fancy_grid', headers=header))
+def isnotebook():
+    try:
+        shell = get_ipython().__class__.__name__
+        if shell == 'ZMQInteractiveShell':
+            return True   # Jupyter notebook or qtconsole
+        elif shell == 'TerminalInteractiveShell':
+            return False  # Terminal running IPython
+        else:
+            return False  # Other type (?)
+    except NameError:
+        return False      # Probably standard Python interpreter
+
+
+def rep_table(table_name, engine, schema=None, key=None,
+              row_count=None, first_row=None, class_name=None,
+              is_notebook=True):
+    types = get_col_types(table_name, engine, schema=schema)
+    for key in types.keys():
+        if type(types[key]) == sa.types.NullType:
+            types[key] = 'NullType'
+    header = ('Column_Name', 'SQL_Data_Type', 'Pandas_Data_Type', 'First_Row_Value')
+    if row_count is None:
+        row_count = get_row_count(table_name, engine, schema=schema)
+    if key is None:
+        key = primary_key(table_name, engine, schema=schema)
+    for chunk in pd.read_sql_table(table_name, engine, schema=schema, chunksize=1):
+        first_row = chunk
+        break
+    if first_row is None:
+        first_row = pd.read_sql_table(table_name, engine, schema=schema)
+    p_dtypes = dict(first_row.dtypes)
+    if schema is not None:
+        name = schema + ' ' + table_name
+    else:
+        name = table_name
+    out = []
+    for (x, y), (i, r) in zip(types.items(), first_row.iteritems()):
+        z = p_dtypes[x]
+        if len(r) > 0:
+            out.append((x, y, z, r.iloc[0]))
+        else:
+            out.append((x, y, z))
+
+    metadata = f'name={name}, key={key}, row_count={row_count}'
+    if class_name is not None:
+        metadata = class_name + '(' + metadata + ')'
+    
+    if is_notebook and isnotebook():
+        html = tabulate(out, tablefmt='html', headers=header)
+        header = f'<a>{metadata}<a>'
+        html =  metadata + html
+        display(HTML(html))
+        return ''
+    else:
+        return (f"""{metadata}
+""" +
+        tabulate(out, tablefmt='fancy_grid', headers=header))
+   
+   #(f"""name={name}, primary_key={key}, row_count={row_count}""" 
+   #        + tabulate(out, tablefmt='fancy_grid', headers=header))

@@ -25,12 +25,14 @@ class DataBase(IDataBase):
         if not self.lazy:
             self.db = {name: Table(name,
                                    engine=engine,
-                                   db=self
-                                   )
+                                   db=self,
+                                   schema=self.schema
+                                  )
                        for name in engine.table_names(schema=self.schema)
                       }
         else:
-            self.db = {name:None for name in engine.table_names()}
+            self.db = {name:utils.rep_table(name, self.engine, self.schema, is_notebook=False)
+                       for name in engine.table_names(schema=self.schema)}
 
     def __getitem__(self, key):
         """
@@ -61,12 +63,11 @@ class DataBase(IDataBase):
         """
         if self.lazy:
             names = self.table_names
-            cols = [', '.join(get_col_names(name, self.engine)) for name in names]
-            keys = [primary_key(name, self.engine) for name in names]
-            tables = [f"Table(name={name}, cols=[{c_names}], key={key})\n" for name, c_names,
-                      key in zip(names, cols, keys)]
-            return f'DataBase({"       , ".join(tables)}, lazy=True, url={self.engine.url})'
-        return f'DataBase({", ".join(repr(tbl) for tbl in self.db.values())}, url={self.engine.url})'
+            tables = [utils.rep_table(name, self.engine, self.schema, is_notebook=False) for name in names]
+            sep = """,
+"""
+            return f'DataBase({sep.join(tables)}, lazy=True, url={self.engine.url})'
+        return f'DataBase({", ".join(utils.rep_table(tbl, self.engine, self.schema, is_notebook=False) for tbl in self.db.values())}, url={self.engine.url})'
 
     def push(self):
         """Push each table to the database
@@ -250,8 +251,8 @@ class Table(BaseTable):
     def __repr__(self):
         """
         """
-        return f"""Table(name={self.name}, key={self.key},
-        {repr(self.data)})"""
+        return utils.rep_table(self.name, self.engine, schema=self.schema,
+                               class_name='Table', is_notebook=True)
 
     # TODO: add lazy loading - feature
 
@@ -371,8 +372,7 @@ class SubTable(BaseTable):
     def __repr__(self):
         """
         """
-        return f"""SubTable(name={self.name}, key={self.key},
-                            {repr(self.data)})"""
+        return utils.rep_table(self.name, self.engine, schema=self.schema, class_name='SubTable', is_notebook=True)
 
     # TODO: add copy_push method
     # TODO: add copy method

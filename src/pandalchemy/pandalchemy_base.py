@@ -440,8 +440,6 @@ class View(Table):
         self.schema = schema
         self.key = key
         self.data = pull_view(view_name, self.engine, self.schema)
-        del self.copy_push
-        del self.copy
 
     def pull(self, engine=None, schema=None):
         self.data = pull_view(self.name, self.engine, self.schema)

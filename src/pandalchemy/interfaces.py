@@ -40,7 +40,7 @@ class ITable(metaclass=abc.ABCMeta):
     def __setitem__(self, key, value):
         raise NotImplementedError
 
-    @abc.abstractproperty
+    @abc.abstractmethod
     def column_names(self):
         raise NotImplementedError
 

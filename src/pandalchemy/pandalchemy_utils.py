@@ -1,12 +1,12 @@
 import pandas as pd
 import sqlalchemy as sa
 import numpy as np
+from IPython import get_ipython
 from tabulate import tabulate
 from IPython.core.display import display, HTML
-
 from sqlalchemy import Integer, String, DateTime, MetaData
 from sqlalchemy.ext.automap import automap_base
-from sqlalchemy import Float, Boolean, func
+from sqlalchemy import Float, Boolean
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
@@ -65,7 +65,7 @@ def tables_data_equal(t1, t2, t1_schema=None, t2_schema=None):
     if not df1.equals(df2):
         return False
     return True
-    
+
 
 def tables_metadata_equal(t1, t2, t1_schema=None, t2_schema=None):
     """Check if tables have same table_name,
@@ -146,7 +146,7 @@ def has_primary_key(table_name, engine, schema=None):
         return False
     return True
 
- 
+
 def primary_key(table_name, engine, schema=None):
     """
     """
@@ -186,7 +186,6 @@ def get_column_values(engine, table_name, column_name, schema=None):
     session = Session()
     tbl = get_table(table_name, engine, schema=schema)
     vals = session.query(tbl.c[column_name]).all()
-    #vals = engine.execute(f'select {column_name} from {table_name}').fetchall()
     return [val[0] for val in vals]
 
 
@@ -201,7 +200,6 @@ def check_val_exist(engine, table_name, column_name, val, schema=None):
     my_case_stmt = select([col]).where(col.in_([val]))
     out = session.execute(my_case_stmt).fetchall()
     session.close()
-    
     out = [r[0] for r in out]
     return val in out
 
@@ -218,7 +216,6 @@ def check_vals_exist(engine, table_name, column_name, vals,
     my_case_stmt = select([col]).where(col.in_(vals))
     out = session.execute(my_case_stmt).fetchall()
     session.close()
-    
     out = [r[0] for r in out]
     if return_vals:
         return out
@@ -271,7 +268,7 @@ def copy_table(src_engine, src_name, dest_name, dest_engine=None, schema=None, d
     # copy schema and create newTable from oldTable
     for column in srcTable.columns:
         destTable.append_column(column.copy())
-    destTable.create()  
+    destTable.create()
 
     SrcSession = sessionmaker(src_engine)
     session = SrcSession()
@@ -357,8 +354,13 @@ def get_table_rows(table_name, engine, key, key_matches,
         column_names = '*'
     else:
         column_names = ', '.join(x for x in column_names)
+
+    if schema is None:
+        name = table_name
+    else:
+        name = schema + '.' + table_name
     return pd.read_sql_query(f'''SELECT {column_names}
-                                 FROM {table_name}
+                                 FROM {name}
                                  WHERE {key}
                                  IN {tuple(key_matches)}''',
                              engine,
@@ -366,8 +368,7 @@ def get_table_rows(table_name, engine, key, key_matches,
                              coerce_float=coerce_float,
                              params=params,
                              parse_dates=parse_dates,
-                             chunksize=chunksize,
-                             schema=schema)
+                             chunksize=chunksize)
 
 
 def key_chunks(engine, table_name, column_name, chunksize, schema=None):
@@ -415,18 +416,14 @@ def update_insert(table_name, engine, records, schema=None):
     key = primary_key(table_name, engine, schema=schema)
     if key is None:
         raise AttributeError('table has no primary key')
-        
     # get key values from records
     key_vals = [record[key] for record in records]
-    
     # find matches in table
     bool_matches = check_vals_exist(engine, table_name, key, key_vals, schema=schema)
     matches_keys = filter_list(key_vals, bool_matches)
     new_records_keys = reverse_filter(key_vals, bool_matches)
-    
     match_records = [x for x in records if x[key] in matches_keys]
     new_records = [x for x in records if x[key] in new_records_keys]
-    
     Session = sa.orm.sessionmaker(engine)
     session = Session()
     mapper =  sa.inspect(get_class(table_name, engine, schema=schema))
@@ -458,9 +455,9 @@ def df_to_sql_on_conflict_do_nothing(df, engine, table_name, primary_key, schema
     return engine.execute(do_nothing_statement)
 
 
-def divide_chunks(l, n):  
-    for i in range(0, len(l), n):  
-        yield l[i:i + n] 
+def divide_chunks(l, n):
+    for i in range(0, len(l), n):
+        yield l[i:i + n]
 
 
 def insert_df(df, engine, table_name, schema=None, chunk_size=500):
@@ -503,9 +500,9 @@ def rep_table(table_name, engine, schema=None, key=None,
               row_count=None, first_row=None, class_name=None,
               is_notebook=True):
     types = get_col_types(table_name, engine, schema=schema)
-    for key in types.keys():
-        if type(types[key]) == sa.types.NullType:
-            types[key] = 'NullType'
+    for type_key in types.keys():
+        if type(types[type_key]) == sa.types.NullType:
+            types[type_key] = 'NullType'
     header = ('Column_Name', 'SQL_Data_Type', 'Pandas_Data_Type', 'First_Row_Value')
     if row_count is None:
         row_count = get_row_count(table_name, engine, schema=schema)
@@ -518,11 +515,11 @@ def rep_table(table_name, engine, schema=None, key=None,
         first_row = pd.read_sql_table(table_name, engine, schema=schema)
     p_dtypes = dict(first_row.dtypes)
     if schema is not None:
-        name = schema + ' ' + table_name
+        name = schema + '.' + table_name
     else:
         name = table_name
     out = []
-    for (x, y), (i, r) in zip(types.items(), first_row.iteritems()):
+    for (x, y), (_, r) in zip(types.items(), first_row.iteritems()):
         z = p_dtypes[x]
         if len(r) > 0:
             out.append((x, y, z, r.iloc[0]))
@@ -532,7 +529,6 @@ def rep_table(table_name, engine, schema=None, key=None,
     metadata = f'name={name}, key={key}, row_count={row_count}'
     if class_name is not None:
         metadata = class_name + '(' + metadata + ')'
-    
     if is_notebook and isnotebook():
         html = tabulate(out, tablefmt='html', headers=header)
         header = f'<a>{metadata}<a>'
@@ -543,6 +539,3 @@ def rep_table(table_name, engine, schema=None, key=None,
         return (f"""{metadata}
 """ +
         tabulate(out, tablefmt='fancy_grid', headers=header))
-   
-   #(f"""name={name}, primary_key={key}, row_count={row_count}""" 
-   #        + tabulate(out, tablefmt='fancy_grid', headers=header))

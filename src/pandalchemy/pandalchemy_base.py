@@ -2,10 +2,10 @@ from pandalchemy.pandalchemy_utils import primary_key, to_sql_k, update_table, t
 from pandalchemy.pandalchemy_utils import from_sql_keyindex, copy_table, get_col_names
 from pandalchemy.magration_functions import update_sql_with_df
 from pandalchemy.interfaces import IDataBase, ITable
-
 from pandalchemy import pandalchemy_utils as utils
 
 from pandas import DataFrame
+import pandas as pd
 from sqlalchemy.engine.base import Engine
 
 
@@ -14,6 +14,7 @@ class DataBase(IDataBase):
        Needs to connect to a database to push changes
        push method changes database with sql
     """
+
     def __init__(self, engine, lazy=False, schema=None):
         """
         """
@@ -27,11 +28,11 @@ class DataBase(IDataBase):
                                    engine=engine,
                                    db=self,
                                    schema=self.schema
-                                  )
+                                   )
                        for name in engine.table_names(schema=self.schema)
-                      }
+                       }
         else:
-            self.db = {name:utils.rep_table(name, self.engine, self.schema, is_notebook=False)
+            self.db = {name: utils.rep_table(name, self.engine, self.schema, is_notebook=False)
                        for name in engine.table_names(schema=self.schema)}
 
     def __getitem__(self, key):
@@ -67,7 +68,8 @@ class DataBase(IDataBase):
             sep = """,
 """
             return f'DataBase({sep.join(tables)}, lazy=True, url={self.engine.url})'
-        return f'DataBase({", ".join(utils.rep_table(tbl, self.engine, self.schema, is_notebook=False) for tbl in self.db.values())}, url={self.engine.url})'
+        return f'DataBase({", ".join(utils.rep_table(tbl, self.engine, self.schema, is_notebook=False) for tbl in self.db.values())},' \
+               f'url={self.engine.url})'
 
     def push(self):
         """Push each table to the database
@@ -98,6 +100,7 @@ class DataBase(IDataBase):
 class BaseTable(ITable):
     """Pandas DataFrame like object used to change sql database tables
     """
+
     def __init__(self, name, data=None, key=None,
                  f_keys=[], types=dict(), engine=None,
                  db=None, schema=None):
@@ -113,17 +116,17 @@ class BaseTable(ITable):
         if isinstance(self.data, Engine):
             self.engine = self.data
             self.data = None
-        
+
         if isinstance(self.engine, Engine):
             # If engine provided and no key: set key to existing table key
             if self.key is None:
                 if self.name in self.engine.table_names(self.schema):
                     self.key = primary_key(self.name, self.engine, self.schema)
             else:
-                pass # 
-            # If engine and data provided: 
+                pass  #
+            # If engine and data provided:
             if self.data is not None:
-                pass # table probably doesn't already exist?
+                pass  # table probably doesn't already exist?
             else:
                 # pull data down from table
                 self.data = from_sql_keyindex(self.name,
@@ -131,7 +134,7 @@ class BaseTable(ITable):
                                               self.schema)
         # If no engine provided but data is:
         elif self.data is not None:
-            
+
             if isinstance(self.data, dict):
                 self.data = DataFrame(data)
 
@@ -152,7 +155,7 @@ class BaseTable(ITable):
             self.data.iloc[key] = value
         else:
             self.data[key] = value
-            
+
     @property
     def column_names(self):
         """
@@ -162,14 +165,14 @@ class BaseTable(ITable):
     def _init(self, data):
         """
         """
-        return {'name':self.name,
-                'data':data.copy(),
-                'key':self.key,
-                'f_keys':self.f_keys,
-                'types':self.types,
-                'engine':self.engine,
-                'db':self.db,
-                'schema':self.schema}
+        return {'name': self.name,
+                'data': data.copy(),
+                'key': self.key,
+                'f_keys': self.f_keys,
+                'types': self.types,
+                'engine': self.engine,
+                'db': self.db,
+                'schema': self.schema}
 
     @property
     def shape(self):
@@ -242,12 +245,13 @@ class BaseTable(ITable):
         """
         self.data.sort_values(inplace=True, *args, **kwargs)
 
-    
+
 class Table(BaseTable):
     """This class maps to an entire sql table.
     Any changes to DataFrame will get pushed to sql table with push method.
-    
+
     """
+
     def __repr__(self):
         """
         """
@@ -295,7 +299,7 @@ class Table(BaseTable):
                                    self.name,
                                    self.engine,
                                    self.schema
-                                  )
+                                   )
         else:
             self.key = self.data.index.name
             if self.key is None:
@@ -362,6 +366,7 @@ class SubTable(BaseTable):
     Push Updates matching primary key rows and
     appends new primary key rows.
     """
+
     # TODO: make __init__ set index as key or index
     def __init__(self, name, data=None, key=None, f_keys=[],
                  types=dict(), engine=None, db=None, schema=None):
@@ -376,7 +381,7 @@ class SubTable(BaseTable):
 
     # TODO: add copy_push method
     # TODO: add copy method
-    
+
     def push(self, engine=None, schema=None):
         """
         """
@@ -386,16 +391,16 @@ class SubTable(BaseTable):
         if schema is not None:
             self.schema = schema
 
-        self.data[self.index.name] = self.data.index 
+        self.data[self.index.name] = self.data.index
         # TODO: Check for missing columns
-        #col_names = get_col_names(self.name, engine)
-        #missing = set(col_names) - set(self.data.columns) 
-        #if missing:
-            #raise AttributeError('Pushing less columns than sql table not allowed')
+        # col_names = get_col_names(self.name, engine)
+        # missing = set(col_names) - set(self.data.columns)
+        # if missing:
+        # raise AttributeError('Pushing less columns than sql table not allowed')
         # TODO: Check for extra columns
-        #extra = set(self.data.columns) - set(col_names)
-        #if extra:
-            #raise AttributeError('Pushing more columns than sql table not allowed')
+        # extra = set(self.data.columns) - set(col_names)
+        # if extra:
+        # raise AttributeError('Pushing more columns than sql table not allowed')
 
         # Push any updates to table
         update_table(self.data,
@@ -407,18 +412,60 @@ class SubTable(BaseTable):
 
         self.__init__(self.name, engine=self.engine, schema=self.schema)
         # update parent Table with SubTable changes
-        #if self.db is not None and self.name in self.db:
-            #self.db[self.name].pull(self.engine)
-        #elif self.parent is not None:
-            #self.parent.pull()
-        #else:
-            #pass
+        # if self.db is not None and self.name in self.db:
+        # self.db[self.name].pull(self.engine)
+        # elif self.parent is not None:
+        # self.parent.pull()
+        # else:
+        # pass
 
         # TODO: figure out how to automatically update parent table
 
 
+def pull_view(view_name, engine, schema=None):
+    if schema is None:
+        name = view_name
+    else:
+        name = schema + '.' + view_name
+    return pd.read_sql(f'select * from {name}', engine)
+
+
+class View(Table):
+    """A class that pulls down a postgres view but when it is pushed it becomes a table
+       push method allows you to pick a new name
+       in order for push to work it needs to have a new name
+    """
+    def __init__(self, view_name, engine, schema=None, key=None):
+        self.engine = engine
+        self.schema = schema
+        self.key = key
+        self.data = pull_view(view_name, self.engine, self.schema)
+        del self.copy_push
+        del self.copy
+
+    def pull(self, engine=None, schema=None):
+        self.data = pull_view(self.name, self.engine, self.schema)
+
+    def push(self, table_name=None, engine=None, schema=None):
+        """Push the view to the database as a table
+           must have new name to get turned into a table
+           changes the View object into a Table object
+        """
+        if table_name is not None:
+            self.name = table_name
+        if engine is not None:
+            self.engine = engine
+        if schema is not None:
+            self.schema = schema
+
+        self.__class__ = Table
+        Table.push(self.engine, self.schema)
+
+
+
+
 def sub_tables(table, chunksize, column_names=None, coerce_float=True,
-                              params=None, parse_dates=None, schema=None):
+               params=None, parse_dates=None, schema=None):
     """
     """
     for chunk in table_chunks(table.engine, table.name, table.key, chunksize,

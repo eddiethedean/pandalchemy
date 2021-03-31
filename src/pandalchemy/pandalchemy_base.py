@@ -435,31 +435,57 @@ class View(Table):
        push method allows you to pick a new name
        in order for push to work it needs to have a new name
     """
-    def __init__(self, view_name, engine, schema=None, key=None):
+    def __init__(self, name, engine, schema=None, key=None):
         self.engine = engine
         self.schema = schema
         self.key = key
-        self.data = pull_view(view_name, self.engine, self.schema)
-
+        self.name = name
+        self.data = pull_view(name, self.engine, self.schema)
+        if key is None:
+            self.data.index.name = 'id'
+            key = 'id'
+    
+    def __repr__(self):
+        """
+        """
+        return utils.rep_table(self.name, self.engine, schema=self.schema,
+                               class_name='View', is_notebook=True, key=self.key)
+    
     def pull(self, engine=None, schema=None):
         self.data = pull_view(self.name, self.engine, self.schema)
 
-    def push(self, table_name=None, engine=None, schema=None):
+    def push(self, name=None, engine=None, schema=None):
         """Push the view to the database as a table
            must have new name to get turned into a table
            changes the View object into a Table object
         """
-        if table_name is not None:
-            self.name = table_name
+        if name is None:
+            name = self.name
+        if schema is None:
+            schema = self.schema
+        if engine is None:
+            engine = self.engine
+
+        if name in engine.table_names(schema=schema):
+            raise ValueError(f'Table named {name} already exists.')
+
+        if name is not None:
+            self.name = name
         if engine is not None:
             self.engine = engine
         if schema is not None:
             self.schema = schema
 
         self.__class__ = Table
-        Table.push(self.engine, self.schema)
 
+        keep_index = (self.key == self.index.name)
 
+        to_sql_k(self.data, self.name, self.engine,
+                 schema=self.schema, keys=self.key,
+                 index=keep_index)
+
+        self.__init__(self.name, self.engine,
+                      self.schema, self.key)
 
 
 def sub_tables(table, chunksize, column_names=None, coerce_float=True,

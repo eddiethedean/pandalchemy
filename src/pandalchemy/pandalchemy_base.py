@@ -23,6 +23,7 @@ class DataBase(IDataBase):
         # lazy loading stops all tables from getting loaded into memory
         # until table is accessed
         self.lazy = lazy
+
         if not self.lazy:
             self.db = {name: Table(name,
                                    engine=engine,
@@ -215,6 +216,8 @@ class BaseTable(ITable):
         if type(key) == int:
             return self.data.iloc[key]
         else:
+            if key == self.data.index.name:
+                return self.data.index
             return self.data[key]
 
     def drop(self, *args, **kwargs):
@@ -363,7 +366,7 @@ class SubTable(BaseTable):
     of a sql table.
     Must have a primary key column in order to compare
     to full table when changes are pushed.
-    Push Updates matching primary key rows and
+    Push updates matching primary key rows and
     appends new primary key rows.
     """
 
@@ -431,7 +434,7 @@ def pull_view(view_name, engine, schema=None):
 
 
 class View(Table):
-    """A class that pulls down a postgres view but when it is pushed it becomes a table
+    """A class that pulls down a postgres view but when it is pushed it creates a table
        push method allows you to pick a new name
        in order for push to work it needs to have a new name
     """
@@ -444,13 +447,13 @@ class View(Table):
         if key is None:
             self.data.index.name = 'id'
             key = 'id'
-    
+
     def __repr__(self):
         """
         """
         return utils.rep_table(self.name, self.engine, schema=self.schema,
                                class_name='View', is_notebook=True, key=self.key)
-    
+
     def pull(self, engine=None, schema=None):
         self.data = pull_view(self.name, self.engine, self.schema)
 
@@ -476,6 +479,7 @@ class View(Table):
         if schema is not None:
             self.schema = schema
 
+        # This transforms the object type to Table
         self.__class__ = Table
 
         keep_index = (self.key == self.index.name)

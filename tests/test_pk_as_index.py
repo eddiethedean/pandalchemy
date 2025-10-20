@@ -1,7 +1,6 @@
 """Tests for primary key as index behavior."""
 
 import pandas as pd
-import pytest
 from sqlalchemy import create_engine
 
 from pandalchemy import DataBase, Table, TrackedDataFrame

@@ -45,10 +45,11 @@ exclude = [
 
 [lint.per-file-ignores]
 "__init__.py" = ["F401"]  # Allow unused imports in __init__.py
-"tests/*" = ["ARG", "E721", "B017", "E712"]  # Allow unused arguments, type comparisons with ==, broad catches, and False comparisons in tests
+"tests/*" = ["ARG", "E721", "B017", "E712", "SIM105", "B011", "B007"]  # Allow unused arguments, type comparisons, broad catches, False comparisons, try-except-pass, assert False, unused loop vars in tests
 "src/pandalchemy/tracked_dataframe.py" = ["SIM102", "B904"]  # Allow nested if in elif blocks and raise without from
 "src/pandalchemy/change_tracker.py" = ["C401"]  # Allow generator in set() for clarity
 "src/pandalchemy/sql_operations.py" = ["SIM108"]  # Allow if-else for set_index clarity
+"src/pandalchemy/pandalchemy_base.py" = ["SIM102"]  # Allow nested if for clarity
 
 [lint.isort]
 known-first-party = ["pandalchemy"]

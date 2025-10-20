@@ -59,12 +59,12 @@ class ChangeTracker:
         renamed_columns: Dictionary mapping old column names to new ones
     """
 
-    def __init__(self, primary_key: str, original_data: pd.DataFrame):
+    def __init__(self, primary_key: str | list[str], original_data: pd.DataFrame):
         """
         Initialize the ChangeTracker.
 
         Args:
-            primary_key: The name of the primary key column
+            primary_key: The name of the primary key column(s) - single string or list for composite
             original_data: The original DataFrame state for comparison
         """
         self.primary_key = primary_key
@@ -97,6 +97,10 @@ class ChangeTracker:
             if all(col in original_data.columns for col in pk_cols):
                 # Store tuples of composite key values
                 self.original_index = {tuple(row) for row in original_data[pk_cols].values}
+            elif isinstance(original_data.index, pd.MultiIndex) and \
+                 all(name in original_data.index.names for name in pk_cols):
+                # PK is in MultiIndex
+                self.original_index = set(original_data.index.values)
             else:
                 self.original_index = set()
 
@@ -188,20 +192,33 @@ class ChangeTracker:
         else:
             # Composite primary key
             pk_cols = list(self.primary_key)
-            if not all(col in current_data.columns for col in pk_cols):
+
+            # Check if PK is in columns or MultiIndex
+            if all(col in current_data.columns for col in pk_cols):
+                # PK in columns
+                current_keys = {tuple(row) for row in current_data[pk_cols].values}
+                current_df = current_data.set_index(pk_cols)
+            elif isinstance(current_data.index, pd.MultiIndex) and \
+                 all(name in current_data.index.names for name in pk_cols):
+                # PK in MultiIndex
+                current_keys = set(current_data.index.values)
+                current_df = current_data
+            else:
                 # Primary key columns missing, can't track row changes
                 return
 
-            # Get tuples of composite key values
-            current_keys = {tuple(row) for row in current_data[pk_cols].values}
-            current_df = current_data.set_index(pk_cols)
-
             # Prepare original data
-            if not all(col in self.original_data.columns for col in pk_cols):
+            if all(col in self.original_data.columns for col in pk_cols):
+                # PK in columns
+                original_df = self.original_data.set_index(pk_cols)
+                original_keys = {tuple(row) for row in self.original_data[pk_cols].values}
+            elif isinstance(self.original_data.index, pd.MultiIndex) and \
+                 all(name in self.original_data.index.names for name in pk_cols):
+                # PK in MultiIndex
+                original_df = self.original_data
+                original_keys = set(self.original_data.index.values)
+            else:
                 return
-
-            original_df = self.original_data.set_index(pk_cols)
-            original_keys = {tuple(row) for row in self.original_data[pk_cols].values}
 
         # Find inserts: keys in current but not in original
         inserted_keys = current_keys - original_keys

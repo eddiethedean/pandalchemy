@@ -177,6 +177,8 @@ def _execute_schema_change(
             schema=schema
         )
     elif schema_change.change_type == 'rename_column':
+        if schema_change.new_column_name is None:
+            raise ValueError(f"new_column_name is required for rename_column operation")
         tm.rename_column(
             engine=engine,
             table_name=table_name,
@@ -365,7 +367,7 @@ def create_table_from_dataframe(
     table_name: str,
     df: pd.DataFrame,
     primary_key: str | list[str],
-    schema: str,
+    schema: str | None,
     if_exists: str = 'fail'
 ) -> None:
     """
@@ -385,7 +387,7 @@ def create_table_from_dataframe(
     Raises:
         ValueError: If table exists and if_exists='fail'
     """
-    from sqlalchemy import Column, Integer, String, Float, Boolean, MetaData, PrimaryKeyConstraint
+    from sqlalchemy import Boolean, Column, Float, Integer, MetaData, PrimaryKeyConstraint, String
 
     # Convert DataFrame to ensure primary key is a column
     df_to_write = extract_primary_key_column(df, primary_key)
@@ -406,7 +408,7 @@ def create_table_from_dataframe(
         for col_name in df_to_write.columns:
             dtype = df_to_write[col_name].dtype
             if 'int' in str(dtype):
-                col_type = Integer
+                col_type: type = Integer
             elif 'float' in str(dtype):
                 col_type = Float
             elif 'bool' in str(dtype):

@@ -55,6 +55,11 @@ class TrackedDataFrame:
         _primary_key: Name of the primary key column
     """
 
+    # Type annotations for mypy
+    _data: DataFrame
+    _primary_key: str | list[str]
+    _tracker: ChangeTracker
+
     # Methods that modify the DataFrame and should be tracked
     _MUTATING_METHODS = {
         # Original methods with inplace support
@@ -103,13 +108,18 @@ class TrackedDataFrame:
         'isin',
     }
 
-    def __init__(self, data: DataFrame, primary_key: str, tracker: ChangeTracker | None = None):
+    def __init__(
+        self,
+        data: DataFrame,
+        primary_key: str | list[str],
+        tracker: ChangeTracker | None = None
+    ):
         """
         Initialize a TrackedDataFrame.
 
         Args:
             data: The pandas DataFrame to wrap
-            primary_key: Name of the primary key column
+            primary_key: Name of the primary key column(s) - single string or list for composite
             tracker: Optional existing ChangeTracker, creates new one if None
         """
         object.__setattr__(self, '_data', data)
@@ -684,7 +694,7 @@ class TrackedDataFrame:
         # Update primary key
         old_pk = self._primary_key
         self._primary_key = column_name
-        self._tracker._primary_key = column_name  # Update tracker too
+        self._tracker.primary_key = column_name  # Update tracker too
 
         # Move new PK columns to index
         # First reset current index if it has a name
@@ -800,6 +810,14 @@ class TrackedDataFrame:
                 raise DataValidationError(
                     f"Row data missing required primary key column(s): {missing}",
                     details={'missing': missing, 'primary_key': pk_cols}
+                )
+
+        # Check for null values in PK
+        for pk_col in pk_cols:
+            if row_data.get(pk_col) is None or pd.isna(row_data.get(pk_col)):
+                raise DataValidationError(
+                    f"Primary key column '{pk_col}' cannot be null",
+                    details={'primary_key': pk_col, 'row_data': row_data}
                 )
 
         # Validate PK doesn't already exist
@@ -1180,12 +1198,12 @@ class TrackedDataFrame:
         # Update primary key if renamed
         if isinstance(self._primary_key, str) and self._primary_key == old_name:
             self._primary_key = new_name
-            self._tracker._primary_key = new_name
+            self._tracker.primary_key = new_name
         elif isinstance(self._primary_key, list) and old_name in self._primary_key:
             pk_list = list(self._primary_key)
             pk_list[pk_list.index(old_name)] = new_name
             self._primary_key = pk_list
-            self._tracker._primary_key = pk_list
+            self._tracker.primary_key = pk_list
 
     def change_column_type(self, column: str, new_type: type) -> None:
         """

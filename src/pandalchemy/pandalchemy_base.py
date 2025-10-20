@@ -216,7 +216,7 @@ class Table(ITable):
         self,
         name: str,
         data: DataFrame | None = None,
-        key: str | None = None,
+        key: str | list[str] | None = None,
         engine: Engine | None = None,
         db: DataBase | None = None,
         schema: str | None = None,
@@ -386,6 +386,12 @@ class Table(ITable):
         if schema is not None:
             self.schema = schema
 
+        # Ensure engine is available
+        if self.engine is None:
+            raise ValueError("Cannot push without an engine")
+        if self.key is None:
+            raise ValueError("Cannot push without a primary key")
+
         # VALIDATE PRIMARY KEY BEFORE PUSH
         try:
             self.data.validate_primary_key()
@@ -469,8 +475,9 @@ class Table(ITable):
         tracker = self.data.get_tracker()
         plan = ExecutionPlan(tracker, current_df)
 
-        # Ensure engine is set
+        # Ensure engine and key are set
         assert self.engine is not None, "Engine must be set before push"
+        assert self.key is not None, "Primary key must be set before push"
 
         if not table_exists(self.engine, self.name, self.schema):
             # Create new table
@@ -479,7 +486,7 @@ class Table(ITable):
                 self.name,
                 current_df,
                 self.key,
-                self.schema or '',
+                self.schema,
                 if_exists='fail'
             )
         else:

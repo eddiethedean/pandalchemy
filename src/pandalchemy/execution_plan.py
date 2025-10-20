@@ -181,16 +181,13 @@ class ExecutionPlan:
             for rc in updates:
                 # Handle both single and composite primary keys
                 if isinstance(self.tracker.primary_key, str):
-                    record = {self.tracker.primary_key: rc.primary_key_value}
+                    update_rec = {self.tracker.primary_key: rc.primary_key_value}
                 else:
                     # Composite PK - unpack tuple into individual key columns
-                    record = {
-                        pk_col: val
-                        for pk_col, val in zip(self.tracker.primary_key, rc.primary_key_value)
-                    }
+                    update_rec = dict(zip(self.tracker.primary_key, rc.primary_key_value))  # type: ignore[arg-type]
                 if rc.new_data:
-                    record.update(rc.new_data)
-                update_records.append(record)
+                    update_rec.update(rc.new_data)
+                update_records.append(update_rec)
 
         # If columns were added and there are existing rows, we need to update them
         if self.tracker.added_columns and not updates:
@@ -215,7 +212,7 @@ class ExecutionPlan:
                     df = self.current_data
 
                 for key in existing_keys:
-                    record = {self.tracker.primary_key: key}
+                    record: dict[str, Any] = {self.tracker.primary_key: key}  # type: ignore[dict-item]
                     # Only include the new columns
                     for col in self.tracker.added_columns:
                         if col in df.columns:
@@ -244,10 +241,7 @@ class ExecutionPlan:
                     record = {self.tracker.primary_key: rc.primary_key_value}
                 else:
                     # Composite PK - unpack tuple into individual key columns
-                    record = {
-                        pk_col: val
-                        for pk_col, val in zip(self.tracker.primary_key, rc.primary_key_value)
-                    }
+                    record = dict(zip(self.tracker.primary_key, rc.primary_key_value))  # type: ignore[arg-type]
                 if rc.new_data:
                     record.update(rc.new_data)
                 insert_records.append(record)

@@ -29,7 +29,7 @@ class IDataBase(metaclass=abc.ABCMeta):
 
 class ITable(metaclass=abc.ABCMeta):
     @abc.abstractmethod
-    def __init__(self, name, data, key, f_keys=[], types=dict()):
+    def __init__(self, name, data, key, f_keys=None, types=None):
         raise NotImplementedError
 
     @abc.abstractmethod

@@ -170,21 +170,36 @@ def ensure_dataframe_copy(df: pd.DataFrame) -> pd.DataFrame:
 
 def extract_primary_key_column(
     df: pd.DataFrame,
-    primary_key: str
+    primary_key: str | list[str]
 ) -> pd.DataFrame:
     """
     Ensure primary key is a column (not index) in the DataFrame.
 
+    Handles both single-column and composite (multi-column) primary keys.
+
     Args:
         df: DataFrame to process
-        primary_key: Name of the primary key
+        primary_key: Name of the primary key (str) or list of names (list[str])
 
     Returns:
-        DataFrame with primary key as a column
+        DataFrame with primary key as column(s)
     """
     df_copy = df.copy()
-    if df_copy.index.name == primary_key:
-        df_copy = df_copy.reset_index()
+
+    # Handle single column primary key
+    if isinstance(primary_key, str):
+        if df_copy.index.name == primary_key:
+            df_copy = df_copy.reset_index()
+    else:
+        # Handle composite primary key (MultiIndex)
+        pk_cols = list(primary_key)
+        if isinstance(df_copy.index, pd.MultiIndex):
+            # Check if index names match PK columns
+            if all(name in pk_cols for name in df_copy.index.names):
+                df_copy = df_copy.reset_index()
+        elif df_copy.index.name in pk_cols:
+            df_copy = df_copy.reset_index()
+
     return df_copy
 
 

@@ -219,7 +219,8 @@ class Table(ITable):
         key: str | None = None,
         engine: Engine | None = None,
         db: DataBase | None = None,
-        schema: str | None = None
+        schema: str | None = None,
+        auto_increment: bool = False
     ):
         """
         Initialize a Table instance.
@@ -231,28 +232,32 @@ class Table(ITable):
             engine: Optional SQLAlchemy engine
             db: Optional parent DataBase object
             schema: Optional schema name
+            auto_increment: If True, enable auto-increment for primary key
         """
         self.name = name
         self.engine = engine
         self.schema = schema
         self.db = db
         self.key = key
+        self.auto_increment = auto_increment
 
         # If engine provided, pull data from database
         if self.engine is not None and data is None:
             if table_exists(self.engine, self.name, self.schema):
-                # Pull data from existing table
-                df = pull_table(self.engine, self.name, self.schema)
-
                 # Get primary key if not specified
                 if self.key is None:
                     self.key = get_primary_key(self.engine, self.name, self.schema)
                     if self.key is None:
                         self.key = 'id'
 
-                # Set index to primary key
-                if self.key in df.columns:
-                    df = df.set_index(self.key)
+                # Pull data from existing table with PK as index
+                df = pull_table(
+                    self.engine,
+                    self.name,
+                    self.schema,
+                    primary_key=self.key,
+                    set_index=True
+                )
 
                 # Create tracked DataFrame
                 self.data = TrackedDataFrame(df, self.key)
@@ -268,7 +273,24 @@ class Table(ITable):
                 data = pd.DataFrame()
 
             if self.key is None:
-                self.key = data.index.name if data.index.name else 'id'
+                # Try to infer key from index
+                if isinstance(data.index, pd.MultiIndex):
+                    self.key = list(data.index.names) if all(data.index.names) else 'id'
+                elif data.index.name:
+                    self.key = data.index.name
+                else:
+                    self.key = 'id'
+
+            # Ensure PK is set as index if not already
+            if isinstance(self.key, list):
+                # Composite key
+                if not isinstance(data.index, pd.MultiIndex) or list(data.index.names) != self.key:
+                    if all(col in data.columns for col in self.key):
+                        data = data.set_index(self.key)
+            else:
+                # Single key
+                if data.index.name != self.key and self.key in data.columns:
+                    data = data.set_index(self.key)
 
             self.data = TrackedDataFrame(data, self.key)
 
@@ -353,12 +375,29 @@ class Table(ITable):
             schema: Optional schema to use (overrides instance schema)
 
         Raises:
+            SchemaError: If primary key columns have been dropped
+            DataValidationError: If primary key validation fails
             SQLAlchemyError: If any database operation fails
         """
+        from pandalchemy.exceptions import DataValidationError, SchemaError
+
         if engine is not None:
             self.engine = engine
         if schema is not None:
             self.schema = schema
+
+        # VALIDATE PRIMARY KEY BEFORE PUSH
+        try:
+            self.data.validate_primary_key()
+        except (SchemaError, DataValidationError) as e:
+            raise SchemaError(
+                f"Cannot push table '{self.name}': {str(e)}",
+                details={
+                    'table': self.name,
+                    'primary_key': self.key,
+                    'error': str(e)
+                }
+            ) from e
 
         # Get the current pandas DataFrame
         current_df = self.data.to_pandas()
@@ -402,10 +441,30 @@ class Table(ITable):
         Args:
             connection: SQLAlchemy connection within a transaction (currently unused,
                        future enhancement for true multi-table transactions)
+
+        Raises:
+            SchemaError: If primary key columns have been dropped
+            DataValidationError: If primary key validation fails
         """
+        from pandalchemy.exceptions import DataValidationError, SchemaError
+
         # Note: connection parameter reserved for future optimization
         # Currently, each table uses its own transaction via execute_plan
         _ = connection  # Reserved for future use  # noqa: F841
+
+        # VALIDATE PRIMARY KEY BEFORE PUSH
+        try:
+            self.data.validate_primary_key()
+        except (SchemaError, DataValidationError) as e:
+            raise SchemaError(
+                f"Cannot push table '{self.name}': {str(e)}",
+                details={
+                    'table': self.name,
+                    'primary_key': self.key,
+                    'error': str(e)
+                }
+            ) from e
+
         current_df = self.data.to_pandas()
         tracker = self.data.get_tracker()
         plan = ExecutionPlan(tracker, current_df)
@@ -471,8 +530,53 @@ class Table(ITable):
             key=self.key,
             engine=self.engine,
             db=self.db,
-            schema=self.schema
+            schema=self.schema,
+            auto_increment=self.auto_increment
         )
+
+    def get_next_pk_value(self) -> int:
+        """
+        Get the next primary key value for auto-increment.
+
+        Queries both local DataFrame and database to get the maximum value,
+        then returns max + 1.
+
+        Returns:
+            Next available PK value
+
+        Raises:
+            ValueError: If table is not configured for auto-increment or PK is not suitable
+        """
+        from sqlalchemy import text
+
+        if not self.auto_increment:
+            raise ValueError(
+                f"Table '{self.name}' is not configured for auto-increment. "
+                "Set auto_increment=True when creating the table."
+            )
+
+        # Get max from local data
+        try:
+            local_max = self.data.get_next_pk_value() - 1  # Subtract 1 since it returns next
+        except ValueError:
+            local_max = 0
+
+        # Get max from database (if table exists)
+        db_max = 0
+        if self.engine and table_exists(self.engine, self.name, self.schema):
+            try:
+                with self.engine.connect() as conn:
+                    # Build query based on schema
+                    table_ref = f"{self.schema}.{self.name}" if self.schema else self.name
+                    query = text(f"SELECT MAX({self.key}) as max_id FROM {table_ref}")
+                    result = conn.execute(query).fetchone()
+                    if result and result[0] is not None:
+                        db_max = int(result[0])
+            except Exception:
+                # If query fails, use local max
+                pass
+
+        return max(local_max, db_max) + 1
 
     def drop(self, *args, **kwargs) -> None:
         """Drop rows or columns from the table."""

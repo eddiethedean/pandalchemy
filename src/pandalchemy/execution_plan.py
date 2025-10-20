@@ -179,7 +179,15 @@ class ExecutionPlan:
         if updates:
             # Batch all updates together
             for rc in updates:
-                record = {self.tracker.primary_key: rc.primary_key_value}
+                # Handle both single and composite primary keys
+                if isinstance(self.tracker.primary_key, str):
+                    record = {self.tracker.primary_key: rc.primary_key_value}
+                else:
+                    # Composite PK - unpack tuple into individual key columns
+                    record = {
+                        pk_col: val
+                        for pk_col, val in zip(self.tracker.primary_key, rc.primary_key_value)
+                    }
                 if rc.new_data:
                     record.update(rc.new_data)
                 update_records.append(record)
@@ -231,7 +239,15 @@ class ExecutionPlan:
             # Batch all inserts together
             insert_records = []
             for rc in inserts:
-                record = {self.tracker.primary_key: rc.primary_key_value}
+                # Handle both single and composite primary keys
+                if isinstance(self.tracker.primary_key, str):
+                    record = {self.tracker.primary_key: rc.primary_key_value}
+                else:
+                    # Composite PK - unpack tuple into individual key columns
+                    record = {
+                        pk_col: val
+                        for pk_col, val in zip(self.tracker.primary_key, rc.primary_key_value)
+                    }
                 if rc.new_data:
                     record.update(rc.new_data)
                 insert_records.append(record)

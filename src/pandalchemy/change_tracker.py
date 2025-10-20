@@ -83,12 +83,22 @@ class ChangeTracker:
         self.renamed_columns: dict[str, str] = {}
 
         # Track original index for row identification
-        if primary_key in original_data.columns:
-            self.original_index = set(original_data[primary_key].values)
-        elif original_data.index.name == primary_key:
-            self.original_index = set(original_data.index.values)
+        # Handle both single column (str) and composite (list) primary keys
+        if isinstance(primary_key, str):
+            if primary_key in original_data.columns:
+                self.original_index = set(original_data[primary_key].values)
+            elif original_data.index.name == primary_key:
+                self.original_index = set(original_data.index.values)
+            else:
+                self.original_index = set()
         else:
-            self.original_index = set()
+            # Composite primary key
+            pk_cols = list(primary_key)
+            if all(col in original_data.columns for col in pk_cols):
+                # Store tuples of composite key values
+                self.original_index = {tuple(row) for row in original_data[pk_cols].values}
+            else:
+                self.original_index = set()
 
     def record_operation(self, method_name: str, *args, **kwargs) -> None:
         """
@@ -153,26 +163,45 @@ class ChangeTracker:
         """
         self.row_changes.clear()
 
-        # Get primary key values
-        if self.primary_key in current_data.columns:
-            current_keys = set(current_data[self.primary_key].values)
-            current_df = current_data.set_index(self.primary_key)
-        elif current_data.index.name == self.primary_key:
-            current_keys = set(current_data.index.values)
-            current_df = current_data
-        else:
-            # No primary key available, can't track row changes
-            return
+        # Handle both single and composite primary keys
+        if isinstance(self.primary_key, str):
+            # Single column primary key
+            if self.primary_key in current_data.columns:
+                current_keys = set(current_data[self.primary_key].values)
+                current_df = current_data.set_index(self.primary_key)
+            elif current_data.index.name == self.primary_key:
+                current_keys = set(current_data.index.values)
+                current_df = current_data
+            else:
+                # No primary key available, can't track row changes
+                return
 
-        # Prepare original data
-        if self.primary_key in self.original_data.columns:
-            original_df = self.original_data.set_index(self.primary_key)
-        elif self.original_data.index.name == self.primary_key:
-            original_df = self.original_data
-        else:
-            return
+            # Prepare original data
+            if self.primary_key in self.original_data.columns:
+                original_df = self.original_data.set_index(self.primary_key)
+            elif self.original_data.index.name == self.primary_key:
+                original_df = self.original_data
+            else:
+                return
 
-        original_keys = set(original_df.index.values)
+            original_keys = set(original_df.index.values)
+        else:
+            # Composite primary key
+            pk_cols = list(self.primary_key)
+            if not all(col in current_data.columns for col in pk_cols):
+                # Primary key columns missing, can't track row changes
+                return
+
+            # Get tuples of composite key values
+            current_keys = {tuple(row) for row in current_data[pk_cols].values}
+            current_df = current_data.set_index(pk_cols)
+
+            # Prepare original data
+            if not all(col in self.original_data.columns for col in pk_cols):
+                return
+
+            original_df = self.original_data.set_index(pk_cols)
+            original_keys = {tuple(row) for row in self.original_data[pk_cols].values}
 
         # Find inserts: keys in current but not in original
         inserted_keys = current_keys - original_keys

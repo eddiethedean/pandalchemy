@@ -221,13 +221,14 @@ def test_columns_setter(sample_dataframe):
 
 
 def test_index_setter(sample_dataframe):
-    """Test setting index property."""
+    """Test that setting index is blocked (PK immutability)."""
+    from pandalchemy.exceptions import DataValidationError
+
     tdf = TrackedDataFrame(sample_dataframe, 'id')
 
-    tdf.index = [10, 20, 30]
-
-    tracker = tdf.get_tracker()
-    assert len(tracker.operations) > 0
+    # Index setter should raise DataValidationError (PKs are immutable)
+    with pytest.raises(DataValidationError, match="Cannot modify index directly"):
+        tdf.index = [10, 20, 30]
 
 
 def test_values_property(sample_dataframe):

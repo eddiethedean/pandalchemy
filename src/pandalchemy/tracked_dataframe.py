@@ -1052,6 +1052,59 @@ class TrackedDataFrame:
 
         self._tracker.compute_row_changes(self._data)
 
+    def delete_where(self, condition: pd.Series | Any) -> int:
+        """
+        Delete rows matching a condition - similar to SQL DELETE...WHERE.
+
+        This provides an intuitive way to delete multiple rows at once based on
+        a condition, similar to SQL DELETE FROM table WHERE condition.
+
+        Args:
+            condition: Boolean Series or array indicating which rows to delete
+
+        Returns:
+            Number of rows deleted
+
+        Examples:
+            # Delete old records
+            deleted = df.delete_where(df['age'] > 65)
+            print(f"Deleted {deleted} rows")
+
+            # Delete inactive users
+            deleted = df.delete_where(df['active'] == False)
+
+            # Delete by multiple conditions
+            deleted = df.delete_where((df['status'] == 'expired') & (df['last_login'] < cutoff_date))
+
+            # Delete all rows matching criteria
+            deleted = df.delete_where(df['balance'] == 0)
+
+        Note:
+            This is a convenience method that filters the DataFrame.
+            All deletions are tracked automatically and will be executed
+            when push() is called.
+        """
+        # Record operation
+        self._tracker.record_operation('delete_where', condition)
+
+        # Count rows to be deleted
+        rows_to_delete = condition.sum() if hasattr(condition, 'sum') else len([x for x in condition if x])
+
+        # Delete matching rows (keep rows where condition is False)
+        pk_cols = self._get_pk_columns()
+        if (len(pk_cols) == 1 and self._data.index.name == pk_cols[0]) or \
+           (isinstance(self._data.index, pd.MultiIndex) and all(name in self._data.index.names for name in pk_cols)):
+            # PK is in index - filter out matching rows, keep index intact
+            self._data = self._data[~condition]
+        else:
+            # PK is in columns - reset index after filtering
+            self._data = self._data[~condition].reset_index(drop=True)
+
+        # Compute row changes
+        self._tracker.compute_row_changes(self._data)
+
+        return rows_to_delete
+
     def upsert_row(self, row_data: dict) -> None:
         """
         Update row if exists, insert if not (based on primary key).

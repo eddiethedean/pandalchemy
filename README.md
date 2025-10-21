@@ -323,6 +323,38 @@ db['users'].data.update_where(db['users'].data['age'] > 30, {'age': lambda x: x 
 db['users'].data.loc[db['users'].data['age'] > 30, 'age'] += 1
 ```
 
+#### Conditional Deletions with delete_where()
+
+Similarly, use `delete_where()` for SQL-style conditional deletions:
+
+```python
+# Delete old records
+deleted = db['logs'].data.delete_where(db['logs'].data['age'] > 65)
+print(f"Deleted {deleted} rows")
+
+# Delete inactive users
+deleted = db['users'].data.delete_where(db['users'].data['active'] == False)
+
+# Delete by multiple conditions
+deleted = db['sessions'].data.delete_where(
+    (db['sessions'].data['status'] == 'expired') & 
+    (db['sessions'].data['last_activity'] < cutoff_date)
+)
+
+# Delete all error logs
+deleted = db['logs'].data.delete_where(
+    (db['logs'].data['level'] == 'ERROR') | (db['logs'].data['level'] == 'WARNING')
+)
+
+# Delete zero balance accounts
+deleted = db['accounts'].data.delete_where(db['accounts'].data['balance'] == 0)
+
+# All tracked automatically!
+db.push()
+```
+
+**Note:** `delete_where()` returns the count of deleted rows for confirmation.
+
 ### Schema Helper Methods
 
 Convenient methods for schema modifications:

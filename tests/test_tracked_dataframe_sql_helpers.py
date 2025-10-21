@@ -817,3 +817,166 @@ def test_update_where_mixed_callables_and_values(sample_df):
 
     assert len(tdf.get_tracker().row_changes) == 2
 
+
+# Tests for delete_where convenience method
+
+def test_delete_where_single_row(sample_df):
+    """Test delete_where with single row deletion."""
+    df = sample_df.set_index('id')
+    tdf = TrackedDataFrame(df, 'id')
+
+    # Delete one person
+    deleted = tdf.delete_where(tdf['age'] == 35)
+
+    assert deleted == 1
+    assert len(tdf) == 2
+    assert 3 not in tdf._data.index
+    assert tdf.has_changes()
+    assert len(tdf.get_tracker().get_deletes()) == 1
+
+
+def test_delete_where_multiple_rows(sample_df):
+    """Test delete_where with multiple row deletion."""
+    df = sample_df.set_index('id')
+    tdf = TrackedDataFrame(df, 'id')
+
+    # Delete people 30 or older
+    deleted = tdf.delete_where(tdf['age'] >= 30)
+
+    assert deleted == 2  # Bob and Charlie
+    assert len(tdf) == 1
+    assert list(tdf._data.index) == [1]
+    assert len(tdf.get_tracker().get_deletes()) == 2
+
+
+def test_delete_where_empty_condition(sample_df):
+    """Test delete_where when no rows match condition."""
+    df = sample_df.set_index('id')
+    tdf = TrackedDataFrame(df, 'id')
+
+    # No rows match
+    deleted = tdf.delete_where(tdf['age'] > 100)
+
+    assert deleted == 0
+    assert len(tdf) == 3
+    assert not tdf.has_changes()
+
+
+def test_delete_where_all_rows(sample_df):
+    """Test delete_where when all rows match condition."""
+    df = sample_df.set_index('id')
+    tdf = TrackedDataFrame(df, 'id')
+
+    # All rows match
+    deleted = tdf.delete_where(tdf['age'] > 0)
+
+    assert deleted == 3
+    assert len(tdf) == 0
+    assert tdf.has_changes()
+    assert len(tdf.get_tracker().get_deletes()) == 3
+
+
+def test_delete_where_complex_condition(sample_df):
+    """Test delete_where with complex AND/OR conditions."""
+    df = sample_df.set_index('id')
+    tdf = TrackedDataFrame(df, 'id')
+
+    # Delete people who are either 30 or older OR named Alice
+    deleted = tdf.delete_where((tdf['age'] >= 30) | (tdf['name'] == 'Alice'))
+
+    assert deleted == 3  # All of them (Alice, Bob >= 30, Charlie >= 30)
+    assert len(tdf) == 0
+    assert 1 not in tdf._data.index
+    assert 2 not in tdf._data.index
+    assert 3 not in tdf._data.index
+
+
+def test_delete_where_composite_pk(composite_pk_df):
+    """Test delete_where with composite primary key."""
+    df = composite_pk_df.set_index(['user_id', 'org_id'])
+    tdf = TrackedDataFrame(df, ['user_id', 'org_id'])
+
+    # Delete inactive users
+    deleted = tdf.delete_where(tdf['active'] == False)
+
+    assert deleted == 1
+    assert len(tdf) == 3
+    assert ('u2', 'org1') not in tdf._data.index
+    assert tdf.has_changes()
+
+
+def test_delete_where_with_integration(tmp_path):
+    """Test delete_where with full database integration."""
+    db_path = tmp_path / "delete_where.db"
+    engine = create_engine(f"sqlite:///{db_path}")
+    db = DataBase(engine)
+
+    # Create table
+    logs = pd.DataFrame({
+        'id': [1, 2, 3, 4, 5, 6],
+        'level': ['INFO', 'ERROR', 'INFO', 'WARNING', 'ERROR', 'DEBUG'],
+        'timestamp': pd.date_range('2025-01-01', periods=6),
+        'message': ['msg1', 'msg2', 'msg3', 'msg4', 'msg5', 'msg6']
+    })
+    db.create_table('logs', logs, primary_key='id')
+
+    # Delete ERROR and WARNING logs
+    deleted = db['logs'].data.delete_where(
+        (db['logs'].data['level'] == 'ERROR') | (db['logs'].data['level'] == 'WARNING')
+    )
+
+    assert deleted == 3  # 2 ERROR + 1 WARNING
+
+    db.push()
+    db.pull()
+
+    # Verify deletions persisted
+    assert len(db['logs']) == 3
+    assert 2 not in db['logs'].data.index  # ERROR deleted
+    assert 4 not in db['logs'].data.index  # WARNING deleted
+    assert 5 not in db['logs'].data.index  # ERROR deleted
+    assert 1 in db['logs'].data.index  # INFO kept
+    assert 3 in db['logs'].data.index  # INFO kept
+    assert 6 in db['logs'].data.index  # DEBUG kept
+
+
+def test_delete_where_returns_count(sample_df):
+    """Test that delete_where returns correct count."""
+    df = sample_df.set_index('id')
+    tdf = TrackedDataFrame(df, 'id')
+
+    # Delete and check return value
+    count = tdf.delete_where(tdf['age'] >= 30)
+
+    assert count == 2
+    assert count == len(tdf.get_tracker().get_deletes())
+
+
+def test_delete_where_chained_operations(sample_df):
+    """Test delete_where followed by other operations."""
+    df = sample_df.set_index('id')
+    tdf = TrackedDataFrame(df, 'id')
+
+    # Delete then update (delete Charlie who is 35, then update Alice)
+    tdf.delete_where(tdf['age'] > 30)  # Deletes Charlie (35)
+    tdf.update_where(tdf['age'] < 30, {'age': 30})  # Updates Alice (25)
+
+    assert len(tdf) == 2  # Alice and Bob remain
+    assert tdf._data.loc[1, 'age'] == 30
+    assert tdf.has_changes()
+    assert len(tdf.get_tracker().get_deletes()) == 1
+    assert len(tdf.get_tracker().get_updates()) == 1
+
+
+def test_delete_where_with_string_condition(sample_df):
+    """Test delete_where with string matching."""
+    df = sample_df.set_index('id')
+    tdf = TrackedDataFrame(df, 'id')
+
+    # Delete names starting with 'C'
+    deleted = tdf.delete_where(tdf['name'].str.startswith('C'))
+
+    assert deleted == 1  # Charlie
+    assert 3 not in tdf._data.index
+    assert len(tdf) == 2
+

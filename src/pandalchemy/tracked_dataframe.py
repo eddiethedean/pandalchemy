@@ -924,6 +924,98 @@ class TrackedDataFrame:
 
         self._tracker.compute_row_changes(self._data)
 
+    def update_where(
+        self,
+        condition: pd.Series | Any,
+        updates: dict[str, Any] | Any,
+        column: str | None = None
+    ) -> None:
+        """
+        Update rows matching a condition - similar to SQL UPDATE...WHERE.
+
+        This provides a more intuitive syntax for conditional updates compared to
+        using loc directly. Supports updating multiple columns with values or functions.
+
+        Args:
+            condition: Boolean Series or array indicating which rows to update
+            updates: Dictionary of {column: value_or_function} or a single value if column specified
+            column: Optional column name for shorthand syntax (when updates is a single value)
+
+        Examples:
+            # Single column with lambda
+            df.update_where(df['age'] > 30, {'age': lambda x: x + 1})
+
+            # Multiple columns
+            df.update_where(df['active'] == True, {
+                'last_seen': datetime.now(),
+                'login_count': lambda x: x + 1
+            })
+
+            # Simple value assignment
+            df.update_where(df['status'] == 'pending', {'status': 'approved'})
+
+            # Shorthand for single column
+            df.update_where(df['age'] > 30, 31, column='age')
+
+            # Increment multiple numeric columns
+            df.update_where(df['tier'] == 'gold', {
+                'discount': lambda x: x + 5,
+                'points': lambda x: x * 1.1
+            })
+
+        Raises:
+            DataValidationError: If trying to update primary key columns
+            ValueError: If column doesn't exist or invalid parameters
+
+        Note:
+            This is a convenience method that internally uses loc for updates.
+            All changes are tracked automatically.
+        """
+        from pandalchemy.exceptions import DataValidationError
+
+        # Handle shorthand syntax: update_where(condition, value, column='col')
+        if column is not None:
+            if isinstance(updates, dict):
+                raise ValueError("When 'column' is specified, 'updates' should be a single value, not a dict")
+            updates = {column: updates}
+
+        # Validate updates is a dictionary
+        if not isinstance(updates, dict):
+            raise ValueError("'updates' must be a dictionary of {column: value_or_function} or a single value with column parameter")
+
+        # Get PK columns for validation
+        pk_cols = self._get_pk_columns()
+
+        # Validate no PK columns in updates
+        pk_in_updates = [col for col in pk_cols if col in updates]
+        if pk_in_updates:
+            raise DataValidationError(
+                f"Cannot update primary key column(s): {pk_in_updates}. "
+                "Primary keys are immutable. To change a primary key, "
+                "delete the row and insert a new one with the desired key.",
+                details={'attempted_pk_updates': pk_in_updates, 'primary_key': pk_cols}
+            )
+
+        # Validate all columns exist
+        for col in updates:
+            if col not in self._data.columns:
+                raise ValueError(f"Column '{col}' does not exist in DataFrame")
+
+        # Record operation
+        self._tracker.record_operation('update_where', condition, updates)
+
+        # Apply each update
+        for col, value in updates.items():
+            if callable(value):
+                # Apply function to existing values
+                self._data.loc[condition, col] = self._data.loc[condition, col].apply(value)
+            else:
+                # Direct assignment
+                self._data.loc[condition, col] = value
+
+        # Compute row changes
+        self._tracker.compute_row_changes(self._data)
+
     def delete_row(self, primary_key_value: Any) -> None:
         """
         Delete a row identified by primary key.

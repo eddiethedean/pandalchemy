@@ -622,3 +622,198 @@ def test_database_push_validates_all_tables(tmp_path):
     with pytest.raises(SchemaError, match="Cannot push table.*dropped"):
         db.push()
 
+
+# Tests for update_where convenience method
+
+def test_update_where_single_column_with_lambda(sample_df):
+    """Test update_where with single column and lambda function."""
+    df = sample_df.set_index('id')
+    tdf = TrackedDataFrame(df, 'id')
+
+    # Increment age for people over 28
+    tdf.update_where(tdf['age'] > 28, {'age': lambda x: x + 1})
+
+    assert tdf._data.loc[1, 'age'] == 25  # Unchanged
+    assert tdf._data.loc[2, 'age'] == 31  # 30 + 1
+    assert tdf._data.loc[3, 'age'] == 36  # 35 + 1
+
+    # Verify changes are tracked
+    assert tdf.has_changes()
+    assert len(tdf.get_tracker().row_changes) == 2
+
+
+def test_update_where_multiple_columns(sample_df):
+    """Test update_where with multiple columns."""
+    df = sample_df.set_index('id')
+    tdf = TrackedDataFrame(df, 'id')
+
+    # Update multiple columns at once
+    tdf.update_where(tdf['age'] < 30, {
+        'age': lambda x: x + 10,
+        'name': lambda x: x + ' Jr.'
+    })
+
+    assert tdf._data.loc[1, 'age'] == 35  # 25 + 10
+    assert tdf._data.loc[1, 'name'] == 'Alice Jr.'
+    assert tdf._data.loc[2, 'age'] == 30  # Unchanged
+    assert tdf._data.loc[2, 'name'] == 'Bob'  # Unchanged
+
+    assert tdf.has_changes()
+    assert len(tdf.get_tracker().row_changes) == 1
+
+
+def test_update_where_simple_value_assignment(sample_df):
+    """Test update_where with simple value assignment."""
+    df = sample_df.set_index('id')
+    tdf = TrackedDataFrame(df, 'id')
+
+    # Set all ages over 30 to exactly 30
+    tdf.update_where(tdf['age'] > 30, {'age': 30})
+
+    assert tdf._data.loc[1, 'age'] == 25
+    assert tdf._data.loc[2, 'age'] == 30
+    assert tdf._data.loc[3, 'age'] == 30  # Changed from 35
+
+    assert tdf.has_changes()
+
+
+def test_update_where_shorthand_syntax(sample_df):
+    """Test update_where with shorthand column syntax."""
+    df = sample_df.set_index('id')
+    tdf = TrackedDataFrame(df, 'id')
+
+    # Using shorthand: value and column parameter
+    tdf.update_where(tdf['age'] > 30, 99, column='age')
+
+    assert tdf._data.loc[3, 'age'] == 99
+    assert tdf.has_changes()
+
+
+def test_update_where_empty_condition(sample_df):
+    """Test update_where when no rows match condition."""
+    df = sample_df.set_index('id')
+    tdf = TrackedDataFrame(df, 'id')
+
+    # No rows match
+    tdf.update_where(tdf['age'] > 100, {'age': 50})
+
+    # Nothing changed
+    assert not tdf.has_changes()
+    assert tdf._data.loc[1, 'age'] == 25
+
+
+def test_update_where_all_rows_match(sample_df):
+    """Test update_where when all rows match condition."""
+    df = sample_df.set_index('id')
+    tdf = TrackedDataFrame(df, 'id')
+
+    # All rows match
+    tdf.update_where(tdf['age'] > 0, {'age': lambda x: x * 2})
+
+    assert tdf._data.loc[1, 'age'] == 50  # 25 * 2
+    assert tdf._data.loc[2, 'age'] == 60  # 30 * 2
+    assert tdf._data.loc[3, 'age'] == 70  # 35 * 2
+
+    assert len(tdf.get_tracker().row_changes) == 3
+
+
+def test_update_where_pk_column_raises_error(sample_df):
+    """Test that updating PK column raises DataValidationError."""
+    df = sample_df.set_index('id')
+    tdf = TrackedDataFrame(df, 'id')
+
+    # Try to update PK - should fail
+    with pytest.raises(DataValidationError, match="Cannot update primary key"):
+        tdf.update_where(tdf['age'] > 30, {'id': 999})
+
+
+def test_update_where_nonexistent_column_raises_error(sample_df):
+    """Test that updating non-existent column raises ValueError."""
+    df = sample_df.set_index('id')
+    tdf = TrackedDataFrame(df, 'id')
+
+    with pytest.raises(ValueError, match="does not exist"):
+        tdf.update_where(tdf['age'] > 30, {'nonexistent': 'value'})
+
+
+def test_update_where_invalid_shorthand_raises_error(sample_df):
+    """Test that invalid shorthand syntax raises ValueError."""
+    df = sample_df.set_index('id')
+    tdf = TrackedDataFrame(df, 'id')
+
+    # Can't use dict with column parameter
+    with pytest.raises(ValueError, match="should be a single value"):
+        tdf.update_where(tdf['age'] > 30, {'age': 50}, column='age')
+
+
+def test_update_where_composite_pk(composite_pk_df):
+    """Test update_where with composite primary key."""
+    df = composite_pk_df.set_index(['user_id', 'org_id'])
+    tdf = TrackedDataFrame(df, ['user_id', 'org_id'])
+
+    # Update role for inactive users
+    tdf.update_where(tdf['active'] == False, {'role': 'suspended'})
+
+    assert tdf._data.loc[('u2', 'org1'), 'role'] == 'suspended'
+    assert tdf.has_changes()
+
+
+def test_update_where_with_integration(tmp_path):
+    """Test update_where with full database integration."""
+    db_path = tmp_path / "update_where.db"
+    engine = create_engine(f"sqlite:///{db_path}")
+    db = DataBase(engine)
+
+    # Create table
+    employees = pd.DataFrame({
+        'id': [1, 2, 3, 4, 5],
+        'name': ['Alice', 'Bob', 'Charlie', 'Diana', 'Eve'],
+        'department': ['Sales', 'Engineering', 'Sales', 'HR', 'Engineering'],
+        'salary': [50000, 80000, 55000, 60000, 90000],
+        'bonus': [0, 0, 0, 0, 0]
+    })
+    db.create_table('employees', employees, primary_key='id')
+
+    # Give 10% raise to Engineering department
+    db['employees'].data.update_where(
+        db['employees'].data['department'] == 'Engineering',
+        {'salary': lambda x: x * 1.1}
+    )
+
+    # Give $5000 bonus to high earners
+    db['employees'].data.update_where(
+        db['employees'].data['salary'] >= 80000,
+        {'bonus': 5000}
+    )
+
+    db.push()
+    db.pull()
+
+    # Verify Engineering got raises
+    assert db['employees'].data.get_row(2)['salary'] == 88000  # 80000 * 1.1
+    assert db['employees'].data.get_row(5)['salary'] == 99000  # 90000 * 1.1
+
+    # Verify high earners got bonus
+    assert db['employees'].data.get_row(2)['bonus'] == 5000
+    assert db['employees'].data.get_row(5)['bonus'] == 5000
+    assert db['employees'].data.get_row(1)['bonus'] == 0  # No bonus
+
+
+def test_update_where_mixed_callables_and_values(sample_df):
+    """Test update_where with mix of callable and direct values."""
+    df = sample_df.set_index('id')
+    tdf = TrackedDataFrame(df, 'id')
+
+    # Mix of lambda and direct value
+    tdf.update_where(tdf['age'] >= 30, {
+        'age': lambda x: x + 5,
+        'name': 'Senior'
+    })
+
+    assert tdf._data.loc[2, 'age'] == 35  # 30 + 5
+    assert tdf._data.loc[2, 'name'] == 'Senior'
+    assert tdf._data.loc[3, 'age'] == 40  # 35 + 5
+    assert tdf._data.loc[3, 'name'] == 'Senior'
+
+    assert len(tdf.get_tracker().row_changes) == 2
+

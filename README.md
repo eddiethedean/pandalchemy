@@ -270,6 +270,59 @@ if users.data.row_exists(4):
 users.push()
 ```
 
+#### Conditional Updates with update_where()
+
+For SQL-style conditional updates, use the intuitive `update_where()` method:
+
+```python
+from datetime import datetime
+
+# Single column update with lambda
+db['users'].data.update_where(
+    db['users'].data['age'] > 30,
+    {'age': lambda x: x + 1}
+)
+
+# Multiple columns at once
+db['users'].data.update_where(
+    db['users'].data['active'] == True,
+    {
+        'last_seen': datetime.now(),
+        'login_count': lambda x: x + 1
+    }
+)
+
+# Simple value assignment
+db['users'].data.update_where(
+    db['users'].data['status'] == 'pending',
+    {'status': 'approved'}
+)
+
+# Shorthand for single column
+db['users'].data.update_where(
+    db['users'].data['age'] > 65,
+    True,
+    column='senior'
+)
+
+# Department-wide salary increase
+db['employees'].data.update_where(
+    db['employees'].data['department'] == 'Engineering',
+    {'salary': lambda x: x * 1.15}  # 15% raise
+)
+
+# All tracked automatically!
+db.push()
+```
+
+**Alternative:** You can also use pandas-style `loc` syntax which is fully tracked:
+
+```python
+# These are equivalent and both tracked:
+db['users'].data.update_where(db['users'].data['age'] > 30, {'age': lambda x: x + 1})
+db['users'].data.loc[db['users'].data['age'] > 30, 'age'] += 1
+```
+
 ### Schema Helper Methods
 
 Convenient methods for schema modifications:

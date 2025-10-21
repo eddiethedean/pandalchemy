@@ -43,7 +43,6 @@ def test_single_row_table(memory_db):
     assert memory_db['single'].loc[1, 'value'] == 200
 
 
-@pytest.mark.skip(reason="Edge case: single-column table where column is PK needs special handling")
 def test_single_column_table(memory_db):
     """Test table with only one column (plus primary key)."""
     data = pd.DataFrame({'id': [1, 2, 3]})

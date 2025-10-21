@@ -354,9 +354,10 @@ def test_partial_batch_failure_isolation(tmp_path):
     assert db['users'].data.get_row(1)['name'] == 'Alicia'
 
 
-@pytest.mark.skip(reason="Pandas prevents duplicate column names at DataFrame level")
 def test_data_validation_all_types_before_push(tmp_path):
-    """Test comprehensive data validation before push."""
+    """Test that pandas/pandalchemy prevent invalid data manipulations."""
+    from pandalchemy.exceptions import SchemaError
+
     db_path = tmp_path / "comprehensive_validation.db"
     engine = create_engine(f"sqlite:///{db_path}")
     db = DataBase(engine)
@@ -373,18 +374,19 @@ def test_data_validation_all_types_before_push(tmp_path):
     errors = db['memberships'].data.validate_data()
     assert errors == []
 
-    # Test various validation errors
-    # 1. Duplicate column names
-    db['memberships'].data._data.columns = ['role', 'role']  # Duplicate!
-    errors = db['memberships'].data.validate_data()
-    assert any('duplicate column' in err.lower() for err in errors)
+    # Test 1: Pandas prevents duplicate column names at DataFrame level
+    # This will raise ValueError from pandas itself
+    with pytest.raises(ValueError, match="Length mismatch"):
+        db['memberships'].data._data.columns = ['role', 'role']
 
     # Reset
     db = DataBase(engine)
 
-    # 2. Missing PK column
+    # Test 2: Dropping PK column prevents push
     db['memberships'].data._data = db['memberships'].data._data.reset_index()
     db['memberships'].data.drop_column_safe('user_id')
-    errors = db['memberships'].data.validate_data()
-    assert any('dropped' in err.lower() for err in errors)
+
+    # Should raise SchemaError when trying to push
+    with pytest.raises(SchemaError, match="Primary key column"):
+        db.push()
 

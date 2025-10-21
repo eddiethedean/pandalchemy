@@ -4,7 +4,6 @@ import time
 
 import numpy as np
 import pandas as pd
-import pytest
 from sqlalchemy import create_engine
 
 from pandalchemy import DataBase, Table
@@ -86,7 +85,6 @@ def test_chunked_processing_pattern(tmp_path):
     assert len(db['data'].data[db['data'].data['processed'] == True]) == 5000
 
 
-@pytest.mark.skip(reason="Bulk insert tracking needs investigation")
 def test_chunked_migration_pattern(tmp_path):
     """Test data migration in chunks."""
     db_path = tmp_path / "migration.db"

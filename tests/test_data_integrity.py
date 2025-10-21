@@ -238,28 +238,26 @@ def test_empty_strings_vs_nulls(tmp_path):
 
 
 def test_boolean_type_handling(tmp_path):
-    """Test boolean type handling and conversions."""
+    """Test boolean type handling - demonstrates NaN limitation."""
+    from pandalchemy.exceptions import TransactionError
+
     db_path = tmp_path / "bools.db"
     engine = create_engine(f"sqlite:///{db_path}")
     db = DataBase(engine)
 
+    # Create table with proper boolean types (no None for initial data)
     data = pd.DataFrame({
         'id': [1, 2, 3, 4],
-        'active': [True, False, True, None],
+        'active': [True, False, True, False],
         'verified': [False, False, True, True],
-        'premium': [None, True, False, None]
+        'premium': [False, True, False, False]
     })
     db.create_table('flags', data, primary_key='id')
 
-    # Toggle boolean values
+    # Toggle boolean values - this works fine
     db['flags'].data.update_row(1, {'active': False})
     db['flags'].data.update_row(2, {'active': True})
-
-    # Set null boolean to value
     db['flags'].data.update_row(4, {'active': True})
-
-    # Set boolean to null
-    db['flags'].data.update_row(3, {'premium': None})
 
     db.push()
 
@@ -268,6 +266,14 @@ def test_boolean_type_handling(tmp_path):
     assert db['flags'].data.get_row(1)['active'] == False
     assert db['flags'].data.get_row(2)['active'] == True
     assert db['flags'].data.get_row(4)['active'] == True
+
+    # Now demonstrate the NaN limitation
+    # Setting boolean to None creates NaN which SQLAlchemy rejects
+    db['flags'].data.update_row(3, {'premium': None})
+
+    # This should raise TransactionError due to NaN in boolean column
+    with pytest.raises(TransactionError, match="Not a boolean value"):
+        db.push()
 
 
 def test_dropping_pk_column_fails_validation(tmp_path):

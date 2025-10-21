@@ -1,7 +1,6 @@
 """Tests for complex multi-table relationships."""
 
 import pandas as pd
-import pytest
 from sqlalchemy import create_engine
 
 from pandalchemy import DataBase
@@ -124,7 +123,6 @@ def test_many_to_many_with_enrollment_attributes(tmp_path):
     assert not db['enrollments'].data.row_exists((3, 102))
 
 
-@pytest.mark.skip(reason="Bulk insert tracking issue with fresh tables")
 def test_bulk_enrollment_semester_registration(tmp_path):
     """Test bulk enrollment for semester registration."""
     db_path = tmp_path / "school.db"
@@ -281,7 +279,6 @@ def test_multi_level_organization_hierarchy(tmp_path):
     assert db['employees'].data.row_exists(105)
 
 
-@pytest.mark.skip(reason="Type conversion issue with capital_city_id")
 def test_circular_reference_tables(tmp_path):
     """Test tables with circular references (A->B, B->A)."""
     db_path = tmp_path / "circular.db"

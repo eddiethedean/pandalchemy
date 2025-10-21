@@ -891,6 +891,171 @@ db.push()
 # database-level optimistic locking or row versioning
 ```
 
+## Known Limitations
+
+While pandalchemy is powerful, there are some limitations to be aware of:
+
+### 1. Schema Changes with Immediate Updates
+
+Adding columns and immediately updating their values in the same transaction may not persist correctly:
+
+```python
+# NOT RECOMMENDED: Schema change + data update in same transaction
+db['articles'].data.add_column_with_default('reviewed_by', None)
+db['articles'].data.update_row(1, {'reviewed_by': 'editor1'})  
+db.push()  # reviewed_by update may not persist
+
+# RECOMMENDED: Push schema changes first
+db['articles'].data.add_column_with_default('reviewed_by', None)
+db['articles'].push()  # Push schema change
+
+db.pull()  # Refresh
+db['articles'].data.update_row(1, {'reviewed_by': 'editor1'})
+db.push()  # Now update persists
+```
+
+### 2. Type Conversion with Empty DataFrames
+
+Creating empty DataFrames without explicit dtypes defaults to float64, which can cause type mismatches:
+
+```python
+# PROBLEMATIC: No type specification
+enrollments = pd.DataFrame({
+    'student_id': [],
+    'course_id': [],
+    'status': []
+})  # All columns default to float64
+
+# BETTER: Specify types explicitly
+enrollments = pd.DataFrame({
+    'student_id': pd.Series([], dtype='int64'),
+    'course_id': pd.Series([], dtype='int64'),
+    'status': pd.Series([], dtype='str')
+})
+```
+
+**Note**: The `pull_table` function includes automatic type inference to handle most type mismatch scenarios, but explicit types are still recommended.
+
+### 3. Renaming Newly Added Columns
+
+You cannot rename a column that was added in the same transaction:
+
+```python
+# WILL FAIL: Rename column added in same transaction
+db['products'].data.add_column_with_default('price_dollars', 0.0)
+db['products'].data.rename_column_safe('price_dollars', 'price')
+db.push()  # TransactionError: Column doesn't exist yet in database
+
+# CORRECT: Push first, then rename
+db['products'].data.add_column_with_default('price_dollars', 0.0)
+db.push()
+
+db.pull()
+db['products'].data.rename_column_safe('price_dollars', 'price')
+db.push()
+```
+
+### 4. Boolean Columns with NULL/NaN Values
+
+SQLite and some databases have strict boolean type checking that doesn't handle NaN:
+
+```python
+# PROBLEMATIC: NaN in boolean column
+flags = pd.DataFrame({
+    'id': [1, 2],
+    'active': [True, None]  # None becomes NaN
+})
+db.create_table('flags', flags, primary_key='id')
+db.push()  # May fail: "Not a boolean value: nan"
+
+# BETTER: Use explicit False or handle NaN
+flags['active'] = flags['active'].fillna(False)
+```
+
+### 5. Database Re-initialization on create_table()
+
+Creating a new table causes the DataBase object to reinitialize, which clears in-memory changes:
+
+```python
+# PROBLEMATIC: Creating table after modifications
+db['accounts'].data.update_row(1, {'balance': 900.0})
+usd_balance = db['accounts'].data.get_row(1)['balance']  # 900.0
+
+# Creating new table reinitializes db
+db.create_table('conversions', conversions_df, primary_key='id')
+
+# Previous modification lost!
+usd_balance = db['accounts'].data.get_row(1)['balance']  # Back to 1000.0
+
+# CORRECT: Push changes before creating new tables
+db['accounts'].data.update_row(1, {'balance': 900.0})
+db['accounts'].push()  # Push before creating new table
+
+db.create_table('conversions', conversions_df, primary_key='id')
+```
+
+### 6. Manually Adding Tables to db.db
+
+Manually adding Table objects to `db.db` after initialization can cause issues:
+
+```python
+# PROBLEMATIC: Manual table addition
+profiles_table = Table('user_profiles', profiles, 'user_id', engine)
+profiles_table.push()
+db.db['user_profiles'] = profiles_table  # May not work correctly
+
+# CORRECT: Use db.create_table or db.add_table
+db.create_table('user_profiles', profiles, primary_key='user_id')
+# or
+table = Table('user_profiles', profiles, 'user_id', engine)
+db.add_table(table, push=True)
+```
+
+### 7. Merging Tables with Different Primary Keys
+
+When merging data from tables with different PK column names, use pandas merge:
+
+```python
+# PROBLEMATIC: Direct iteration with get_row
+for user_id in db['users'].data.index:
+    profile = db['profiles'].data.get_row(user_id)  # May return None
+    # if profiles uses 'user_id' but users uses 'id'
+
+# CORRECT: Use pandas merge
+users_df = db['users'].data.to_pandas().reset_index()
+profiles_df = db['profiles'].data.to_pandas().reset_index()
+merged_df = users_df.merge(profiles_df, left_on='id', right_on='user_id')
+```
+
+### 8. get_row() with Newly Added Columns
+
+Newly added columns may not be accessible via `get_row()` until after a push/pull cycle:
+
+```python
+# PROBLEMATIC: Accessing new column immediately
+db['documents'].data.add_column_with_default('version', 1)
+doc = db['documents'].data.get_row(1)
+version = doc['version']  # May raise KeyError
+
+# CORRECT: Use direct DataFrame access or push first
+version = db['documents'].data._data.loc[1, 'version']
+# or
+db['documents'].push()
+db.pull()
+doc = db['documents'].data.get_row(1)
+version = doc['version']  # Now works
+```
+
+### Best Practices to Avoid Limitations
+
+1. **Push schema changes immediately** before updating data in new columns
+2. **Specify dtypes explicitly** when creating empty DataFrames
+3. **Push before creating new tables** to avoid losing in-memory changes
+4. **Use pandas merge** for complex table joins and denormalization
+5. **Handle NULL values** appropriately for boolean and numeric columns
+6. **Separate schema operations** from data operations across transactions
+7. **Re-instantiate DataBase** after major structural changes
+
 ## Development
 
 ### Running Tests

@@ -44,14 +44,45 @@ def pull_table(
     Returns:
         DataFrame with PK as index if set_index=True and primary_key provided
     """
-    # Use pandas read_sql_table directly - it's reliable and efficient
+    # Use pandas read_sql_table - try with type inference first
     try:
         df = pd.read_sql_table(table_name, engine, schema=schema)
+    except (ValueError, TypeError):
+        # Type conversion error - retry without dtype enforcement
+        # This handles cases where column types don't match data
+        try:
+            # Use read_sql which is more lenient with type conversions
+            from sqlalchemy import text
+            query = f'SELECT * FROM {table_name}' if schema is None else f'SELECT * FROM {schema}.{table_name}'
+            df = pd.read_sql(text(query), engine)
+        except Exception:
+            # If all else fails, return empty DataFrame with correct structure
+            metadata = MetaData()
+            table = Table(table_name, metadata, autoload_with=engine, schema=schema)
+            df = pd.DataFrame(columns=[col.name for col in table.columns])
+            return df
+
+    # Try to infer better dtypes - convert string representations of numbers
+    # This handles cases where schema says FLOAT but data is stored as strings
+    try:
+        df = df.infer_objects()
+        # Convert columns that look like numbers
+        for col in df.columns:
+            if df[col].dtype == 'object':
+                try:
+                    # Try numeric conversion, keeping NaN for non-numeric values
+                    converted = pd.to_numeric(df[col], errors='coerce')
+                    # Only apply if we didn't lose information (no new NaNs)
+                    original_na_count = df[col].isna().sum()
+                    converted_na_count = converted.isna().sum()
+                    if converted_na_count == original_na_count:
+                        df[col] = converted
+                except (ValueError, TypeError):
+                    # If it fails, keep as object
+                    pass
     except Exception:
-        # If table is empty or has issues, get structure and return empty DataFrame
-        metadata = MetaData()
-        table = Table(table_name, metadata, autoload_with=engine, schema=schema)
-        df = pd.DataFrame(columns=[col.name for col in table.columns])
+        # If type inference fails, use data as-is
+        pass
 
     # Set primary key as index if requested
     if set_index and primary_key:
@@ -178,7 +209,7 @@ def _execute_schema_change(
         )
     elif schema_change.change_type == 'rename_column':
         if schema_change.new_column_name is None:
-            raise ValueError(f"new_column_name is required for rename_column operation")
+            raise ValueError("new_column_name is required for rename_column operation")
         tm.rename_column(
             engine=engine,
             table_name=table_name,

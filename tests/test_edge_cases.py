@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 from sqlalchemy import create_engine
 
-from pandalchemy import DataBase, Table
+from pandalchemy import DataBase, TableDataFrame
 
 
 @pytest.fixture
@@ -21,7 +21,7 @@ def test_empty_dataframe_table(memory_db):
     empty_df = empty_df.astype({'id': 'int64'})
 
     # This might not work for all databases, but test the structure
-    table = Table('empty_test', data=empty_df, key='id', engine=memory_db.engine)
+    table = TableDataFrame('empty_test', data=empty_df, primary_key='id', engine=memory_db.engine)
 
     assert len(table) == 0
     assert 'name' in table.columns
@@ -50,7 +50,7 @@ def test_single_column_table(memory_db):
     memory_db.create_table('single_col', data, primary_key='id')
 
     # Add a row using proper API
-    memory_db['single_col'].data.add_row({'id': 4})
+    memory_db['single_col'].add_row({'id': 4})
 
     memory_db['single_col'].push()
 
@@ -64,7 +64,7 @@ def test_table_with_none_schema():
 
     data = pd.DataFrame({'id': [1, 2], 'val': [10, 20]})
 
-    table = Table('test', data=data, key='id', engine=engine, schema=None)
+    table = TableDataFrame('test', data=data, primary_key='id', engine=engine, schema=None)
 
     assert table.schema is None
     assert len(table) == 2
@@ -97,8 +97,9 @@ def test_table_repr(memory_db):
 
     repr_str = repr(memory_db['test'])
 
-    assert 'Table' in repr_str
-    assert 'test' in repr_str
+    assert 'TableDataFrame' in repr_str
+    # Data should be shown in repr
+    assert 'name' in repr_str or 'A' in repr_str
 
 
 def test_database_repr(memory_db):
@@ -224,7 +225,7 @@ def test_add_table_method(memory_db):
     """Test DataBase.add_table() method."""
     data = pd.DataFrame({'id': [1, 2], 'val': [10, 20]})
 
-    table = Table('new_table', data=data, key='id', engine=memory_db.engine)
+    table = TableDataFrame('new_table', data=data, primary_key='id', engine=memory_db.engine)
 
     memory_db.add_table(table, push=False)
 
@@ -235,7 +236,7 @@ def test_add_table_with_push(memory_db):
     """Test DataBase.add_table() with immediate push."""
     data = pd.DataFrame({'id': [1], 'val': [10]})
 
-    table = Table('pushed_table', data=data, key='id', engine=memory_db.engine)
+    table = TableDataFrame('pushed_table', data=data, primary_key='id', engine=memory_db.engine)
 
     memory_db.add_table(table, push=True)
 
@@ -301,7 +302,7 @@ def test_database_setitem(memory_db):
     """Test DataBase __setitem__ method."""
     data = pd.DataFrame({'id': [1], 'val': [10]})
 
-    table = Table('new', data=data, key='id', engine=memory_db.engine)
+    table = TableDataFrame('new', data=data, primary_key='id', engine=memory_db.engine)
 
     memory_db['new'] = table
 
@@ -314,7 +315,8 @@ def test_table_column_names_property(memory_db):
 
     memory_db.create_table('test', data, primary_key='id')
 
-    col_names = memory_db['test'].column_names
+    # TableDataFrame uses .columns directly (pandas attribute)
+    col_names = memory_db['test'].columns
 
     assert 'col1' in col_names
     assert 'col2' in col_names

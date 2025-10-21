@@ -16,16 +16,15 @@ from pandalchemy.exceptions import (
     TransactionError,
 )
 from pandalchemy.execution_plan import ExecutionPlan
-from pandalchemy.pandalchemy_base import DataBase, Table
-from pandalchemy.tracked_dataframe import TrackedDataFrame
+from pandalchemy.pandalchemy_base import DataBase
+from pandalchemy.tracked_dataframe import TableDataFrame
 
 __version__ = version
 
 __all__ = [
     # Core classes
     'DataBase',
-    'Table',
-    'TrackedDataFrame',
+    'TableDataFrame',
     'ChangeTracker',
     'ChangeType',
     'ExecutionPlan',

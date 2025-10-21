@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 from sqlalchemy import create_engine
 
-from pandalchemy import DataBase, Table
+from pandalchemy import DataBase, TableDataFrame
 
 
 @pytest.fixture
@@ -129,8 +129,8 @@ def test_insert_row(sqlite_engine, sample_data):
     combined_df = pd.concat([current_df, new_row])
 
     # Update the table data
-    db['users'].data._data = combined_df
-    db['users'].data._tracker.compute_row_changes(combined_df)
+    db['users']._data = combined_df
+    db['users']._tracker.compute_row_changes(combined_df)
 
     # Push changes
     db['users'].push()
@@ -314,7 +314,7 @@ def test_empty_table(sqlite_engine):
 
     # Create table (this might not work with some implementations)
     # For now, just verify the structure can handle it
-    table = Table('empty_table', data=empty_df, key='id', engine=sqlite_engine)
+    table = TableDataFrame('empty_table', data=empty_df, primary_key='id', engine=sqlite_engine)
 
     assert len(table) == 0
 
@@ -328,8 +328,9 @@ def test_repr_methods(sqlite_engine, sample_data):
     db_repr = repr(db)
     assert 'DataBase' in db_repr
 
-    # Test Table repr
+    # Test TableDataFrame repr
     table_repr = repr(db['users'])
-    assert 'Table' in table_repr
-    assert 'users' in table_repr
+    assert 'TableDataFrame' in table_repr
+    # Name should be shown in repr
+    assert 'Alice' in table_repr or 'users' in table_repr
 

@@ -11,7 +11,7 @@ from typing import Any
 
 import pandas as pd
 import transmutation as tm
-from sqlalchemy import Engine, MetaData, Table, inspect, text
+from sqlalchemy import Engine, MetaData, Table, inspect
 
 from pandalchemy.exceptions import TransactionError
 from pandalchemy.execution_plan import ExecutionPlan, OperationType, SchemaChange
@@ -52,11 +52,24 @@ def pull_table(
         # This handles cases where column types don't match data
         try:
             # Use read_sql which is more lenient with type conversions
+            # Build safe query with text() - table/schema names are from database introspection
             from sqlalchemy import text
-            query = f'SELECT * FROM {table_name}' if schema is None else f'SELECT * FROM {schema}.{table_name}'
-            df = pd.read_sql(text(query), engine)
-        except Exception:
+
+            # Build query safely
+            if schema is None:
+                query = text(f'SELECT * FROM "{table_name}"')
+            else:
+                query = text(f'SELECT * FROM "{schema}"."{table_name}"')
+            df = pd.read_sql(query, engine)
+        except Exception as e:
             # If all else fails, return empty DataFrame with correct structure
+            import warnings
+            warnings.warn(
+                f"Failed to read table '{table_name}' from database, returning empty DataFrame. "
+                f"Error: {type(e).__name__}: {str(e)}",
+                UserWarning,
+                stacklevel=2
+            )
             metadata = MetaData()
             table = Table(table_name, metadata, autoload_with=engine, schema=schema)
             df = pd.DataFrame(columns=[col.name for col in table.columns])
@@ -80,22 +93,26 @@ def pull_table(
                 except (ValueError, TypeError):
                     # If it fails, keep as object
                     pass
-    except Exception:
+    except Exception as e:
         # If type inference fails, use data as-is
-        pass
+        import warnings
+        warnings.warn(
+            f"Type inference failed for table '{table_name}', using data as-is. "
+            f"Error: {type(e).__name__}: {str(e)}",
+            UserWarning,
+            stacklevel=2
+        )
 
     # Set primary key as index if requested
     if set_index and primary_key:
+        from pandalchemy.pk_utils import normalize_primary_key, set_pk_as_index
+
         # Normalize PK to list
-        pk_cols = [primary_key] if isinstance(primary_key, str) else list(primary_key)
+        pk_cols = normalize_primary_key(primary_key)
 
         # Check if all PK columns exist
         if all(col in df.columns for col in pk_cols):
-            if len(pk_cols) == 1:
-                df = df.set_index(pk_cols[0])
-            else:
-                # Composite key - set MultiIndex
-                df = df.set_index(pk_cols)
+            df = set_pk_as_index(df, pk_cols)
 
     return df
 
@@ -216,6 +233,15 @@ def _execute_schema_change(
             old_col_name=schema_change.column_name,
             new_col_name=schema_change.new_column_name,
             schema=schema
+        )
+    elif schema_change.change_type == 'alter_column_type':
+        # Use transmutation's alter_column with type_ parameter
+        tm.alter_column(
+            table_name=table_name,
+            column_name=schema_change.column_name,
+            engine=engine,
+            schema=schema,
+            type_=_pandas_dtype_to_python_type(schema_change.new_column_type)
         )
 
 
@@ -420,81 +446,61 @@ def create_table_from_dataframe(
     """
     from sqlalchemy import Boolean, Column, Float, Integer, MetaData, PrimaryKeyConstraint, String
 
+    from pandalchemy.pk_utils import normalize_primary_key
+    from pandalchemy.utils import prepare_primary_key_for_table_creation
+
+    # Prepare primary key (handles index naming and validation)
+    df_prepared = prepare_primary_key_for_table_creation(df, primary_key)
+
     # Convert DataFrame to ensure primary key is a column
-    df_to_write = extract_primary_key_column(df, primary_key)
+    df_to_write = extract_primary_key_column(df_prepared, primary_key)
 
     # Normalize schema for pandas
     schema_normalized = normalize_schema(schema)
 
-    # Check if we have a composite primary key
-    pk_cols = [primary_key] if isinstance(primary_key, str) else list(primary_key)
-    is_composite = len(pk_cols) > 1
+    # Normalize primary key to list format
+    pk_cols = normalize_primary_key(primary_key)
 
-    if is_composite:
-        # For composite PKs, use SQLAlchemy to create table with proper constraint
-        metadata = MetaData()
+    # Use SQLAlchemy Table API for all cases to ensure PRIMARY KEY constraint
+    # This avoids the ALTER TABLE limitation in SQLite and other databases
+    metadata = MetaData()
 
-        # Map pandas dtypes to SQLAlchemy types
-        columns = []
-        for col_name in df_to_write.columns:
-            dtype = df_to_write[col_name].dtype
-            if 'int' in str(dtype):
-                col_type: type = Integer
-            elif 'float' in str(dtype):
-                col_type = Float
-            elif 'bool' in str(dtype):
-                col_type = Boolean
-            else:
-                col_type = String
-            columns.append(Column(col_name, col_type))
+    # Map pandas dtypes to SQLAlchemy types
+    columns: list[Column] = []
+    for col_name in df_to_write.columns:
+        dtype = df_to_write[col_name].dtype
+        if 'int' in str(dtype):
+            col_type: type = Integer
+        elif 'float' in str(dtype):
+            col_type = Float
+        elif 'bool' in str(dtype):
+            col_type = Boolean
+        else:
+            col_type = String
+        columns.append(Column(col_name, col_type))
 
-        # Add composite primary key constraint
-        table_obj = Table(
-            table_name,
-            metadata,
-            *columns,
-            PrimaryKeyConstraint(*pk_cols, name=f'{table_name}_pk'),
-            schema=schema_normalized
-        )
+    # Add primary key constraint
+    table_obj = Table(
+        table_name,
+        metadata,
+        *columns,
+        PrimaryKeyConstraint(*pk_cols, name=f'{table_name}_pk'),
+        schema=schema_normalized
+    )
 
-        # Create the table
-        if if_exists == 'replace':
-            table_obj.drop(engine, checkfirst=True)
-        metadata.create_all(engine)
+    # Create the table
+    if if_exists == 'replace':
+        table_obj.drop(engine, checkfirst=True)
+    metadata.create_all(engine)
 
-        # Insert data
-        df_to_write.to_sql(
-            table_name,
-            engine,
-            schema=schema_normalized,
-            if_exists='append',
-            index=False
-        )
-    else:
-        # Single column PK - use pandas to_sql
-        df_to_write.to_sql(
-            table_name,
-            engine,
-            schema=schema_normalized,
-            if_exists=if_exists,
-            index=False
-        )
-
-        # Add primary key constraint if it doesn't exist (separate transaction)
-        try:
-            # Check if primary key already exists
-            existing_pk = get_primary_key(engine, table_name, schema_normalized)
-            if not existing_pk:
-                # Add primary key constraint using raw SQL
-                with engine.begin() as connection:
-                    table_ref = f"{schema_normalized}.{table_name}" if schema_normalized else table_name
-                    connection.execute(text(
-                        f"ALTER TABLE {table_ref} ADD PRIMARY KEY ({primary_key})"
-                    ))
-        except Exception:
-            # Primary key might already exist or database doesn't support ALTER TABLE
-            # This is okay - pandas ensures uniqueness in the data itself
-            pass
+    # Insert data
+    df_to_write.to_sql(
+        table_name,
+        engine,
+        schema=schema_normalized,
+        if_exists='append',
+        index=False
+    )
 
 
 def table_exists(engine: Engine, table_name: str, schema: str | None = None) -> bool:

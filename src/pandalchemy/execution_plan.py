@@ -48,10 +48,11 @@ class PlanStep:
 @dataclass
 class SchemaChange:
     """Represents a schema modification."""
-    change_type: str  # 'add_column', 'drop_column', 'rename_column'
+    change_type: str  # 'add_column', 'drop_column', 'rename_column', 'alter_column_type'
     column_name: str
     new_column_name: str | None = None
     column_type: Any | None = None
+    new_column_type: Any | None = None
 
 
 class ExecutionPlan:
@@ -151,6 +152,21 @@ class ExecutionPlan:
                 description=f"Add column '{col_name}'",
                 data=schema_change,
                 priority=3
+            )
+            self.steps.append(step)
+
+        # Handle column type changes
+        for col_name, new_type in self.tracker.altered_column_types.items():
+            schema_change = SchemaChange(
+                change_type='alter_column_type',
+                column_name=col_name,
+                new_column_type=new_type
+            )
+            step = PlanStep(
+                operation_type=OperationType.SCHEMA_CHANGE,
+                description=f"Alter column '{col_name}' type to {new_type.__name__}",
+                data=schema_change,
+                priority=4
             )
             self.steps.append(step)
 

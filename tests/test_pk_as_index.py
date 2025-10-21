@@ -3,7 +3,7 @@
 import pandas as pd
 from sqlalchemy import create_engine
 
-from pandalchemy import DataBase, Table, TrackedDataFrame
+from pandalchemy import DataBase, TableDataFrame
 
 
 def test_single_pk_becomes_index_on_pull(tmp_path):
@@ -13,14 +13,14 @@ def test_single_pk_becomes_index_on_pull(tmp_path):
 
     # Create and push a table
     df = pd.DataFrame({'id': [1, 2, 3], 'name': ['Alice', 'Bob', 'Charlie'], 'age': [25, 30, 35]})
-    table = Table('users', df, 'id', engine)
+    table = TableDataFrame('users', df, 'id', engine)
     table.push()
 
     # Pull and verify PK is index
     db = DataBase(engine)
-    assert db['users'].data.to_pandas().index.name == 'id'
-    assert 'id' not in db['users'].data.columns
-    assert list(db['users'].data.to_pandas().index) == [1, 2, 3]
+    assert db['users'].to_pandas().index.name == 'id'
+    assert 'id' not in db['users'].columns
+    assert list(db['users'].to_pandas().index) == [1, 2, 3]
 
 
 def test_composite_pk_becomes_multiindex_on_pull(tmp_path):
@@ -35,12 +35,12 @@ def test_composite_pk_becomes_multiindex_on_pull(tmp_path):
         'role': ['admin', 'user', 'user']
     })
 
-    table = Table('memberships', df, ['user_id', 'org_id'], engine)
+    table = TableDataFrame('memberships', df, ['user_id', 'org_id'], engine)
     table.push()
 
     # Pull and verify composite PK is MultiIndex
     db = DataBase(engine)
-    pulled_df = db['memberships'].data.to_pandas()
+    pulled_df = db['memberships'].to_pandas()
 
     assert isinstance(pulled_df.index, pd.MultiIndex)
     assert list(pulled_df.index.names) == ['user_id', 'org_id']
@@ -56,7 +56,7 @@ def test_set_primary_key_moves_column_to_index():
         'name': ['Alice', 'Bob', 'Charlie']
     })
 
-    tdf = TrackedDataFrame(df, 'id')
+    tdf = TableDataFrame(data=df, primary_key='id')
 
     # Initially id might be in columns
     tdf.to_pandas()
@@ -80,7 +80,7 @@ def test_set_primary_key_creates_multiindex():
         'role': ['admin', 'user', 'admin']
     })
 
-    tdf = TrackedDataFrame(df, 'id')
+    tdf = TableDataFrame(data=df, primary_key='id')
 
     # Change to composite PK
     tdf.set_primary_key(['user_id', 'org_id'])
@@ -104,7 +104,7 @@ def test_set_primary_key_resets_old_index():
 
     # Start with id as PK (in index)
     df_indexed = df.set_index('id')
-    tdf = TrackedDataFrame(df_indexed, 'id')
+    tdf = TableDataFrame(data=df_indexed, primary_key='id')
 
     # Verify id is the index
     assert tdf.to_pandas().index.name == 'id'
@@ -132,7 +132,7 @@ def test_crud_operations_work_with_index_based_pk(tmp_path):
         'age': [25, 30, 35]
     }).set_index('id')
 
-    tdf = TrackedDataFrame(df, 'id')
+    tdf = TableDataFrame(data=df, primary_key='id')
 
     # Test add_row
     tdf.add_row({'id': 4, 'name': 'Dave', 'age': 40})
@@ -207,7 +207,7 @@ def test_reset_index_provides_pk_as_column():
         'name': ['Alice', 'Bob', 'Charlie']
     }).set_index('id')
 
-    tdf = TrackedDataFrame(df, 'id')
+    tdf = TableDataFrame(data=df, primary_key='id')
 
     # Get as regular DataFrame with PK as column
     df_with_pk = tdf.to_pandas().reset_index()
@@ -225,7 +225,7 @@ def test_table_operations_preserve_index():
         'age': [25, 30, 35]
     }).set_index('id')
 
-    tdf = TrackedDataFrame(df, 'id')
+    tdf = TableDataFrame(data=df, primary_key='id')
 
     # Add a column
     tdf['email'] = ['a@test.com', 'b@test.com', 'c@test.com']

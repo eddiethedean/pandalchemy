@@ -5,7 +5,7 @@ import pandas as pd
 import pytest
 from sqlalchemy import create_engine
 
-from pandalchemy import DataBase, Table
+from pandalchemy import DataBase, TableDataFrame
 
 
 def test_split_table_normalization(tmp_path):
@@ -43,18 +43,18 @@ def test_split_table_normalization(tmp_path):
     db.create_table('addresses', addresses, primary_key='id')
 
     # Migrate data
-    for user_id in db['users_old'].data.index:
-        user = db['users_old'].data.get_row(user_id)
+    for user_id in db['users_old'].index:
+        user = db['users_old'].get_row(user_id)
 
         # Insert into users
-        db['users'].data.add_row({
+        db['users'].add_row({
             'id': user_id,
             'username': user['username'],
             'email': user['email']
         })
 
         # Insert into addresses
-        db['addresses'].data.add_row({
+        db['addresses'].add_row({
             'id': user_id,
             'user_id': user_id,
             'street': user['address_street'],
@@ -68,8 +68,8 @@ def test_split_table_normalization(tmp_path):
     db.pull()
     assert len(db['users']) == 3
     assert len(db['addresses']) == 3
-    assert 'address_street' not in db['users'].data.columns
-    assert db['addresses'].data.get_row(1)['street'] == '123 Main St'
+    assert 'address_street' not in db['users'].columns
+    assert db['addresses'].get_row(1)['street'] == '123 Main St'
 
 
 def test_merge_tables_denormalization(tmp_path):
@@ -93,8 +93,8 @@ def test_merge_tables_denormalization(tmp_path):
     db.create_table('profiles', profiles, primary_key='user_id')
 
     # Best approach: use pandas merge for denormalization
-    users_df = db['users'].data.to_pandas().reset_index()
-    profiles_df = db['profiles'].data.to_pandas().reset_index()
+    users_df = db['users'].to_pandas().reset_index()
+    profiles_df = db['profiles'].to_pandas().reset_index()
 
     # Merge in memory
     merged_df = users_df.merge(profiles_df, left_on='id', right_on='user_id')
@@ -102,14 +102,14 @@ def test_merge_tables_denormalization(tmp_path):
     merged_df = merged_df.set_index('id')
 
     # Create new table from merged data
-    from pandalchemy import Table
-    merged_table = Table('users_merged', merged_df, 'id', engine)
+    from pandalchemy import TableDataFrame
+    merged_table = TableDataFrame('users_merged', merged_df, 'id', engine)
     merged_table.push()
 
     # Verify merge
     db_verify = DataBase(engine)
     assert len(db_verify['users_merged']) == 3
-    merged_user = db_verify['users_merged'].data.get_row(1)
+    merged_user = db_verify['users_merged'].get_row(1)
     assert merged_user['username'] == 'alice'
     assert merged_user['full_name'] == 'Alice Smith'
     assert merged_user['bio'] == 'Dev'
@@ -130,31 +130,31 @@ def test_column_splitting_transformation(tmp_path):
     db.create_table('users', users, primary_key='id')
 
     # Add first_name and last_name columns
-    db['users'].data.add_column_with_default('first_name', '')
-    db['users'].data.add_column_with_default('last_name', '')
+    db['users'].add_column_with_default('first_name', '')
+    db['users'].add_column_with_default('last_name', '')
 
     # Split full_name
-    for user_id in db['users'].data.index:
-        user = db['users'].data.get_row(user_id)
+    for user_id in db['users'].index:
+        user = db['users'].get_row(user_id)
         names = user['full_name'].split(' ', 1)
         first = names[0]
         last = names[1] if len(names) > 1 else ''
 
-        db['users'].data.update_row(user_id, {
+        db['users'].update_row(user_id, {
             'first_name': first,
             'last_name': last
         })
 
     # Drop old column
-    db['users'].data.drop_column_safe('full_name')
+    db['users'].drop_column_safe('full_name')
 
     db.push()
 
     # Verify split
     db.pull()
-    assert 'full_name' not in db['users'].data.columns
-    assert db['users'].data.get_row(1)['first_name'] == 'Alice'
-    assert db['users'].data.get_row(1)['last_name'] == 'Smith'
+    assert 'full_name' not in db['users'].columns
+    assert db['users'].get_row(1)['first_name'] == 'Alice'
+    assert db['users'].get_row(1)['last_name'] == 'Smith'
 
 
 def test_column_combining_transformation(tmp_path):
@@ -173,25 +173,25 @@ def test_column_combining_transformation(tmp_path):
     db.create_table('users', users, primary_key='id')
 
     # Add combined column
-    db['users'].data.add_column_with_default('full_name', '')
+    db['users'].add_column_with_default('full_name', '')
 
     # Combine names
-    for user_id in db['users'].data.index:
-        user = db['users'].data.get_row(user_id)
+    for user_id in db['users'].index:
+        user = db['users'].get_row(user_id)
         full_name = f"{user['first_name']} {user['last_name']}"
-        db['users'].data.update_row(user_id, {'full_name': full_name})
+        db['users'].update_row(user_id, {'full_name': full_name})
 
     # Drop old columns
-    db['users'].data.drop_column_safe('first_name')
-    db['users'].data.drop_column_safe('last_name')
+    db['users'].drop_column_safe('first_name')
+    db['users'].drop_column_safe('last_name')
 
     db.push()
 
     # Verify combination
     db.pull()
-    assert 'first_name' not in db['users'].data.columns
-    assert 'last_name' not in db['users'].data.columns
-    assert db['users'].data.get_row(1)['full_name'] == 'Alice Smith'
+    assert 'first_name' not in db['users'].columns
+    assert 'last_name' not in db['users'].columns
+    assert db['users'].get_row(1)['full_name'] == 'Alice Smith'
 
 
 def test_change_from_single_to_composite_pk(tmp_path):
@@ -215,12 +215,12 @@ def test_change_from_single_to_composite_pk(tmp_path):
         'org_id': [],
         'role': []
     })
-    new_table = Table('memberships_new', memberships_new, ['user_id', 'org_id'], engine)
+    new_table = TableDataFrame('memberships_new', memberships_new, ['user_id', 'org_id'], engine)
 
     # Migrate data (excluding old PK)
-    for row_id in db['memberships'].data.index:
-        row = db['memberships'].data.get_row(row_id)
-        new_table.data.add_row({
+    for row_id in db['memberships'].index:
+        row = db['memberships'].get_row(row_id)
+        new_table.add_row({
             'user_id': row['user_id'],
             'org_id': row['org_id'],
             'role': row['role']
@@ -230,8 +230,8 @@ def test_change_from_single_to_composite_pk(tmp_path):
 
     # Verify new structure
     db = DataBase(engine)
-    assert isinstance(db['memberships_new'].data.index, pd.MultiIndex)
-    assert list(db['memberships_new'].data.index.names) == ['user_id', 'org_id']
+    assert isinstance(db['memberships_new'].index, pd.MultiIndex)
+    assert list(db['memberships_new'].index.names) == ['user_id', 'org_id']
 
 
 def test_change_from_composite_to_single_pk(tmp_path):
@@ -255,12 +255,12 @@ def test_change_from_composite_to_single_pk(tmp_path):
         'org_id': [],
         'role': []
     })
-    new_table = Table('memberships_new', memberships_new, 'id', engine, auto_increment=True)
+    new_table = TableDataFrame('memberships_new', memberships_new, 'id', engine, auto_increment=True)
 
     # Migrate data with new synthetic PK
-    for idx, (user_id, org_id) in enumerate(db['memberships'].data.index, 1):
-        row = db['memberships'].data.get_row((user_id, org_id))
-        new_table.data.add_row({
+    for idx, (user_id, org_id) in enumerate(db['memberships'].index, 1):
+        row = db['memberships'].get_row((user_id, org_id))
+        new_table.add_row({
             'id': idx,
             'user_id': user_id,
             'org_id': org_id,
@@ -271,9 +271,9 @@ def test_change_from_composite_to_single_pk(tmp_path):
 
     # Verify new structure
     db = DataBase(engine)
-    assert db['memberships_new'].data.index.name == 'id'
-    assert 'user_id' in db['memberships_new'].data.columns
-    assert 'org_id' in db['memberships_new'].data.columns
+    assert db['memberships_new'].index.name == 'id'
+    assert 'user_id' in db['memberships_new'].columns
+    assert 'org_id' in db['memberships_new'].columns
 
 
 def test_add_computed_columns_from_existing_data(tmp_path):
@@ -291,19 +291,19 @@ def test_add_computed_columns_from_existing_data(tmp_path):
     db.create_table('sales', sales, primary_key='id')
 
     # Add computed columns
-    db['sales'].data.add_column_with_default('total', 0.0)
-    db['sales'].data.add_column_with_default('tax', 0.0)
-    db['sales'].data.add_column_with_default('grand_total', 0.0)
+    db['sales'].add_column_with_default('total', 0.0)
+    db['sales'].add_column_with_default('tax', 0.0)
+    db['sales'].add_column_with_default('grand_total', 0.0)
 
     # Calculate values
     tax_rate = 0.08
-    for sale_id in db['sales'].data.index:
-        sale = db['sales'].data.get_row(sale_id)
+    for sale_id in db['sales'].index:
+        sale = db['sales'].get_row(sale_id)
         total = sale['quantity'] * sale['unit_price']
         tax = total * tax_rate
         grand_total = total + tax
 
-        db['sales'].data.update_row(sale_id, {
+        db['sales'].update_row(sale_id, {
             'total': round(total, 2),
             'tax': round(tax, 2),
             'grand_total': round(grand_total, 2)
@@ -313,7 +313,7 @@ def test_add_computed_columns_from_existing_data(tmp_path):
 
     # Verify calculations
     db.pull()
-    sample = db['sales'].data.get_row(1)
+    sample = db['sales'].get_row(1)
     expected = sample['quantity'] * sample['unit_price']
     assert abs(sample['total'] - expected) < 0.01
 
@@ -333,36 +333,36 @@ def test_progressive_schema_migration(tmp_path):
     db.create_table('users', users_v1, primary_key='id')
 
     # Version 2: Add status column
-    db['users'].data.add_column_with_default('status', 'active')
+    db['users'].add_column_with_default('status', 'active')
     db.push()
 
     # Version 3: Split name into first/last
     db.pull()
-    db['users'].data.add_column_with_default('first_name', '')
-    db['users'].data.add_column_with_default('last_name', '')
+    db['users'].add_column_with_default('first_name', '')
+    db['users'].add_column_with_default('last_name', '')
 
-    for user_id in db['users'].data.index:
-        user = db['users'].data.get_row(user_id)
-        db['users'].data.update_row(user_id, {
+    for user_id in db['users'].index:
+        user = db['users'].get_row(user_id)
+        db['users'].update_row(user_id, {
             'first_name': user['name'],
             'last_name': ''
         })
 
-    db['users'].data.drop_column_safe('name')
+    db['users'].drop_column_safe('name')
     db.push()
 
     # Version 4: Add timestamps
     db.pull()
-    db['users'].data.add_column_with_default('created_at', str(pd.Timestamp.now()))
-    db['users'].data.add_column_with_default('updated_at', str(pd.Timestamp.now()))
+    db['users'].add_column_with_default('created_at', str(pd.Timestamp.now()))
+    db['users'].add_column_with_default('updated_at', str(pd.Timestamp.now()))
     db.push()
 
     # Verify final schema
     db.pull()
-    assert 'name' not in db['users'].data.columns
-    assert 'first_name' in db['users'].data.columns
-    assert 'status' in db['users'].data.columns
-    assert 'created_at' in db['users'].data.columns
+    assert 'name' not in db['users'].columns
+    assert 'first_name' in db['users'].columns
+    assert 'status' in db['users'].columns
+    assert 'created_at' in db['users'].columns
 
 
 def test_reorder_composite_pk_columns(tmp_path):
@@ -385,14 +385,14 @@ def test_reorder_composite_pk_columns(tmp_path):
         'org_id': [],
         'role': []
     })
-    new_table = Table('memberships', memberships_new, ['user_id', 'org_id'], engine)
+    new_table = TableDataFrame('memberships', memberships_new, ['user_id', 'org_id'], engine)
 
     # Migrate with reordered PK
-    for idx in db['memberships_old'].data.index:
+    for idx in db['memberships_old'].index:
         org_id, user_id = idx  # Original order
-        row = db['memberships_old'].data.get_row(idx)
+        row = db['memberships_old'].get_row(idx)
 
-        new_table.data.add_row({
+        new_table.add_row({
             'user_id': user_id,  # Swapped order
             'org_id': org_id,
             'role': row['role']
@@ -402,9 +402,9 @@ def test_reorder_composite_pk_columns(tmp_path):
 
     # Verify new order
     db = DataBase(engine)
-    assert db['memberships'].data.index.names == ['user_id', 'org_id']
+    assert db['memberships'].index.names == ['user_id', 'org_id']
     # Access with new order
-    assert db['memberships'].data.row_exists((1, 'org1'))
+    assert db['memberships'].row_exists((1, 'org1'))
 
 
 def test_type_migration_with_data_transformation(tmp_path):
@@ -424,20 +424,20 @@ def test_type_migration_with_data_transformation(tmp_path):
     db.create_table('products', products, primary_key='id')
 
     # Add a new column
-    db['products'].data.add_column_with_default('price_dollars', 0.0)
+    db['products'].add_column_with_default('price_dollars', 0.0)
 
     # Transform cents to dollars
-    for product_id in db['products'].data.index:
-        product = db['products'].data.get_row(product_id)
+    for product_id in db['products'].index:
+        product = db['products'].get_row(product_id)
         price_dollars = product['price_cents'] / 100.0
-        db['products'].data.update_row(product_id, {'price_dollars': price_dollars})
+        db['products'].update_row(product_id, {'price_dollars': price_dollars})
 
     # Drop old column
-    db['products'].data.drop_column_safe('price_cents')
+    db['products'].drop_column_safe('price_cents')
 
     # Try to rename the newly added column in the same transaction
     # This should fail because the column doesn't exist in the database yet
-    db['products'].data.rename_column_safe('price_dollars', 'price')
+    db['products'].rename_column_safe('price_dollars', 'price')
 
     # This should raise TransactionError because you can't rename a column
     # that was just added in the same transaction
@@ -461,9 +461,9 @@ def test_add_versioning_to_existing_table(tmp_path):
 
     # Best practice: Add columns and push immediately
     timestamp = str(pd.Timestamp.now())
-    db['documents'].data.add_column_with_default('version', 1)
-    db['documents'].data.add_column_with_default('updated_at', timestamp)
-    db['documents'].data.add_column_with_default('updated_by', 'system')
+    db['documents'].add_column_with_default('version', 1)
+    db['documents'].add_column_with_default('updated_at', timestamp)
+    db['documents'].add_column_with_default('updated_by', 'system')
     db['documents'].push()
 
     # Now create history table and populate it
@@ -472,8 +472,8 @@ def test_add_versioning_to_existing_table(tmp_path):
 
     # Create history table
     history_data = []
-    for doc_id in db['documents'].data.index:
-        doc_data = db['documents'].data._data.loc[doc_id]
+    for doc_id in db['documents'].index:
+        doc_data = db['documents']._data.loc[doc_id]
         history_data.append({
             'id': doc_id,
             'document_id': doc_id,
@@ -485,19 +485,19 @@ def test_add_versioning_to_existing_table(tmp_path):
         })
 
     history_df = pd.DataFrame(history_data)
-    from pandalchemy import Table
-    history_table = Table('document_history', history_df, 'id', engine)
+    from pandalchemy import TableDataFrame
+    history_table = TableDataFrame('document_history', history_df, 'id', engine)
     history_table.push()
 
     # Verify versioning added
     db = DataBase(engine)
-    assert 'version' in db['documents'].data.columns
-    assert 'updated_at' in db['documents'].data.columns
+    assert 'version' in db['documents'].columns
+    assert 'updated_at' in db['documents'].columns
     assert len(db['document_history']) == 3
 
     # Verify the history data
-    assert db['document_history'].data.get_row(1)['version'] == 1
-    assert db['document_history'].data.get_row(1)['title'] == 'Doc 1'
+    assert db['document_history'].get_row(1)['version'] == 1
+    assert db['document_history'].get_row(1)['title'] == 'Doc 1'
 
 
 def test_denormalize_for_read_performance(tmp_path):
@@ -521,18 +521,18 @@ def test_denormalize_for_read_performance(tmp_path):
     db.create_table('posts', posts, primary_key='id')
 
     # Add denormalized username to posts for faster reads
-    db['posts'].data.add_column_with_default('username', '')
+    db['posts'].add_column_with_default('username', '')
 
     # Populate username
-    for post_id in db['posts'].data.index:
-        post = db['posts'].data.get_row(post_id)
-        user = db['users'].data.get_row(post['user_id'])
-        db['posts'].data.update_row(post_id, {'username': user['username']})
+    for post_id in db['posts'].index:
+        post = db['posts'].get_row(post_id)
+        user = db['users'].get_row(post['user_id'])
+        db['posts'].update_row(post_id, {'username': user['username']})
 
     db.push()
 
     # Verify denormalization
     db.pull()
-    assert db['posts'].data.get_row(1)['username'] == 'alice'
-    assert db['posts'].data.get_row(3)['username'] == 'bob'
+    assert db['posts'].get_row(1)['username'] == 'alice'
+    assert db['posts'].get_row(3)['username'] == 'bob'
 

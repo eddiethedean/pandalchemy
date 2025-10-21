@@ -24,7 +24,7 @@ def test_null_handling_various_patterns(tmp_path):
     db.create_table('users', data, primary_key='id')
 
     # Add row with nulls
-    db['users'].data.add_row({
+    db['users'].add_row({
         'id': 5,
         'name': None,
         'age': None,
@@ -32,18 +32,18 @@ def test_null_handling_various_patterns(tmp_path):
     })
 
     # Update null to value
-    db['users'].data.update_row(2, {'name': 'Bob'})
+    db['users'].update_row(2, {'name': 'Bob'})
 
     # Update value to null
-    db['users'].data.update_row(4, {'email': None})
+    db['users'].update_row(4, {'email': None})
 
     db.push()
 
     # Verify null handling
     db.pull()
-    assert db['users'].data.get_row(2)['name'] == 'Bob'
-    assert pd.isna(db['users'].data.get_row(4)['email'])
-    assert pd.isna(db['users'].data.get_row(5)['name'])
+    assert db['users'].get_row(2)['name'] == 'Bob'
+    assert pd.isna(db['users'].get_row(4)['email'])
+    assert pd.isna(db['users'].get_row(5)['name'])
 
 
 def test_null_in_composite_pk_fails(tmp_path):
@@ -61,7 +61,7 @@ def test_null_in_composite_pk_fails(tmp_path):
 
     # Try to add row with null in PK
     with pytest.raises(DataValidationError):
-        db['memberships'].data.add_row({
+        db['memberships'].add_row({
             'user_id': None,
             'org_id': 'org3',
             'role': 'guest'
@@ -82,7 +82,7 @@ def test_duplicate_pk_detection_single_column(tmp_path):
 
     # Try to add duplicate PK
     with pytest.raises(DataValidationError, match="already exists"):
-        db['users'].data.add_row({
+        db['users'].add_row({
             'id': 2,  # Duplicate!
             'name': 'Bob2'
         })
@@ -103,7 +103,7 @@ def test_duplicate_pk_detection_composite(tmp_path):
 
     # Try to add duplicate composite PK
     with pytest.raises(DataValidationError, match="already exists"):
-        db['memberships'].data.add_row({
+        db['memberships'].add_row({
             'user_id': 1,
             'org_id': 'org1',  # Duplicate combination!
             'role': 'guest'
@@ -130,7 +130,7 @@ def test_bulk_insert_with_duplicates_fails(tmp_path):
     ]
 
     with pytest.raises(DataValidationError, match="duplicate"):
-        db['users'].data.bulk_insert(rows)
+        db['users'].bulk_insert(rows)
 
 
 def test_unicode_and_special_characters(tmp_path):
@@ -159,7 +159,7 @@ def test_unicode_and_special_characters(tmp_path):
     db.create_table('users', data, primary_key='id')
 
     # Add more unicode
-    db['users'].data.add_row({
+    db['users'].add_row({
         'id': 6,
         'name': 'Владимир',  # Cyrillic
         'description': '→←↑↓'  # Arrows
@@ -169,9 +169,9 @@ def test_unicode_and_special_characters(tmp_path):
 
     # Verify unicode preserved
     db.pull()
-    assert db['users'].data.get_row(2)['name'] == '王小明'
-    assert db['users'].data.get_row(5)['name'] == '🎉 Party! 🎊'
-    assert db['users'].data.get_row(6)['name'] == 'Владимир'
+    assert db['users'].get_row(2)['name'] == '王小明'
+    assert db['users'].get_row(5)['name'] == '🎉 Party! 🎊'
+    assert db['users'].get_row(6)['name'] == 'Владимир'
 
 
 def test_very_large_numbers(tmp_path):
@@ -191,7 +191,7 @@ def test_very_large_numbers(tmp_path):
     db.create_table('numbers', data, primary_key='id')
 
     # Add row with extreme values
-    db['numbers'].data.add_row({
+    db['numbers'].add_row({
         'id': 4,
         'small_int': 127,
         'large_int': 2**31 - 2,
@@ -204,8 +204,8 @@ def test_very_large_numbers(tmp_path):
 
     # Verify large numbers preserved
     db.pull()
-    assert db['numbers'].data.get_row(1)['large_int'] == 2**31 - 1
-    assert db['numbers'].data.get_row(2)['huge_int'] == -(2**63)
+    assert db['numbers'].get_row(1)['large_int'] == 2**31 - 1
+    assert db['numbers'].get_row(2)['huge_int'] == -(2**63)
 
 
 def test_empty_strings_vs_nulls(tmp_path):
@@ -221,20 +221,20 @@ def test_empty_strings_vs_nulls(tmp_path):
     db.create_table('strings', data, primary_key='id')
 
     # Add various string edge cases
-    db['strings'].data.add_row({'id': 5, 'value': ''})
-    db['strings'].data.add_row({'id': 6, 'value': None})
+    db['strings'].add_row({'id': 5, 'value': ''})
+    db['strings'].add_row({'id': 6, 'value': None})
 
     # Update empty to null and vice versa
-    db['strings'].data.update_row(1, {'value': None})
-    db['strings'].data.update_row(2, {'value': ''})
+    db['strings'].update_row(1, {'value': None})
+    db['strings'].update_row(2, {'value': ''})
 
     db.push()
 
     # Verify distinction maintained
     db.pull()
-    assert pd.isna(db['strings'].data.get_row(1)['value'])
-    assert db['strings'].data.get_row(2)['value'] == ''
-    assert pd.isna(db['strings'].data.get_row(6)['value'])
+    assert pd.isna(db['strings'].get_row(1)['value'])
+    assert db['strings'].get_row(2)['value'] == ''
+    assert pd.isna(db['strings'].get_row(6)['value'])
 
 
 def test_boolean_type_handling(tmp_path):
@@ -255,21 +255,21 @@ def test_boolean_type_handling(tmp_path):
     db.create_table('flags', data, primary_key='id')
 
     # Toggle boolean values - this works fine
-    db['flags'].data.update_row(1, {'active': False})
-    db['flags'].data.update_row(2, {'active': True})
-    db['flags'].data.update_row(4, {'active': True})
+    db['flags'].update_row(1, {'active': False})
+    db['flags'].update_row(2, {'active': True})
+    db['flags'].update_row(4, {'active': True})
 
     db.push()
 
     # Verify boolean handling
     db.pull()
-    assert db['flags'].data.get_row(1)['active'] == False
-    assert db['flags'].data.get_row(2)['active'] == True
-    assert db['flags'].data.get_row(4)['active'] == True
+    assert db['flags'].get_row(1)['active'] == False
+    assert db['flags'].get_row(2)['active'] == True
+    assert db['flags'].get_row(4)['active'] == True
 
     # Now demonstrate the NaN limitation
     # Setting boolean to None creates NaN which SQLAlchemy rejects
-    db['flags'].data.update_row(3, {'premium': None})
+    db['flags'].update_row(3, {'premium': None})
 
     # This should raise TransactionError due to NaN in boolean column
     with pytest.raises(TransactionError, match="Not a boolean value"):
@@ -290,11 +290,11 @@ def test_dropping_pk_column_fails_validation(tmp_path):
     db.create_table('users', data, primary_key='id')
 
     # Try to drop PK column (need to reset index first to access it)
-    db['users'].data._data = db['users'].data._data.reset_index()
-    db['users'].data.drop_column_safe('id')
+    db['users']._data = db['users']._data.reset_index()
+    db['users'].drop_column_safe('id')
 
     # Validation should fail
-    errors = db['users'].data.validate_data()
+    errors = db['users'].validate_data()
     assert len(errors) > 0
     assert any('dropped' in err.lower() for err in errors)
 
@@ -317,14 +317,14 @@ def test_upsert_duplicate_handling(tmp_path):
     db.create_table('users', data, primary_key='id')
 
     # Upsert existing (should update)
-    db['users'].data.upsert_row({
+    db['users'].upsert_row({
         'id': 2,
         'username': 'bob_updated',
         'score': 250
     })
 
     # Upsert new (should insert)
-    db['users'].data.upsert_row({
+    db['users'].upsert_row({
         'id': 4,
         'username': 'diana',
         'score': 400
@@ -334,10 +334,10 @@ def test_upsert_duplicate_handling(tmp_path):
 
     # Verify
     db.pull()
-    assert db['users'].data.get_row(2)['username'] == 'bob_updated'
-    assert db['users'].data.get_row(2)['score'] == 250
-    assert db['users'].data.row_exists(4)
-    assert db['users'].data.get_row(4)['username'] == 'diana'
+    assert db['users'].get_row(2)['username'] == 'bob_updated'
+    assert db['users'].get_row(2)['score'] == 250
+    assert db['users'].row_exists(4)
+    assert db['users'].get_row(4)['username'] == 'diana'
 
 
 def test_data_type_conversions_edge_cases(tmp_path):
@@ -357,7 +357,7 @@ def test_data_type_conversions_edge_cases(tmp_path):
     db.create_table('types', data, primary_key='id')
 
     # Change column types via data replacement
-    db['types'].data.add_row({
+    db['types'].add_row({
         'id': 2,
         'int_val': 999,
         'float_val': 2.71828,
@@ -366,7 +366,7 @@ def test_data_type_conversions_edge_cases(tmp_path):
     })
 
     # Add row with type coercion edge cases
-    db['types'].data.add_row({
+    db['types'].add_row({
         'id': 3,
         'int_val': 0,
         'float_val': 0.0,
@@ -378,10 +378,10 @@ def test_data_type_conversions_edge_cases(tmp_path):
 
     # Verify types preserved
     db.pull()
-    assert isinstance(db['types'].data.get_row(2)['int_val'], (int, pd.Int64Dtype))
-    assert db['types'].data.get_row(2)['str_val'] == '12345'
-    assert db['types'].data.get_row(3)['int_val'] == 0
-    assert db['types'].data.get_row(3)['float_val'] == 0.0
+    assert isinstance(db['types'].get_row(2)['int_val'], (int, pd.Int64Dtype))
+    assert db['types'].get_row(2)['str_val'] == '12345'
+    assert db['types'].get_row(3)['int_val'] == 0
+    assert db['types'].get_row(3)['float_val'] == 0.0
 
 
 def test_constraint_violation_scenarios(tmp_path):
@@ -408,7 +408,7 @@ def test_constraint_violation_scenarios(tmp_path):
 
     # Creating orphaned reference (no FK constraint enforced by pandalchemy)
     # This would violate FK in a real DB with constraints
-    db['posts'].data.add_row({
+    db['posts'].add_row({
         'id': 3,
         'user_id': 999,  # Non-existent user
         'title': 'Orphaned Post'
@@ -419,8 +419,8 @@ def test_constraint_violation_scenarios(tmp_path):
     db.push()
 
     db.pull()
-    assert db['posts'].data.row_exists(3)
-    assert db['posts'].data.get_row(3)['user_id'] == 999
+    assert db['posts'].row_exists(3)
+    assert db['posts'].get_row(3)['user_id'] == 999
 
 
 def test_partial_composite_pk_null_fails(tmp_path):
@@ -438,7 +438,7 @@ def test_partial_composite_pk_null_fails(tmp_path):
 
     # Try to add with one PK column null
     with pytest.raises(DataValidationError):
-        db['memberships'].data.add_row({
+        db['memberships'].add_row({
             'user_id': 3,
             'org_id': None,  # Null in PK!
             'role': 'guest'
@@ -461,7 +461,7 @@ def test_string_length_edge_cases(tmp_path):
     db.create_table('strings', data, primary_key='id')
 
     # Add very long string
-    db['strings'].data.add_row({
+    db['strings'].add_row({
         'id': 2,
         'short': '',
         'medium': 'z' * 50,
@@ -473,8 +473,8 @@ def test_string_length_edge_cases(tmp_path):
 
     # Verify length preserved
     db.pull()
-    assert len(db['strings'].data.get_row(1)['long']) == 10000
-    assert len(db['strings'].data.get_row(2)['long']) == 50000
+    assert len(db['strings'].get_row(1)['long']) == 10000
+    assert len(db['strings'].get_row(2)['long']) == 50000
 
 
 def test_date_edge_cases(tmp_path):
@@ -495,7 +495,7 @@ def test_date_edge_cases(tmp_path):
     db.create_table('events', data, primary_key='id')
 
     # Add edge case dates
-    db['events'].data.add_row({
+    db['events'].add_row({
         'id': 5,
         'event_date': '1970-01-01'  # Unix epoch
     })
@@ -504,8 +504,8 @@ def test_date_edge_cases(tmp_path):
 
     # Verify dates
     db.pull()
-    assert db['events'].data.get_row(1)['event_date'] == '1900-01-01'
-    assert db['events'].data.get_row(5)['event_date'] == '1970-01-01'
+    assert db['events'].get_row(1)['event_date'] == '1900-01-01'
+    assert db['events'].get_row(5)['event_date'] == '1970-01-01'
 
 
 def test_mixed_type_columns(tmp_path):
@@ -525,8 +525,8 @@ def test_mixed_type_columns(tmp_path):
 
     # Verify mixed types handled (all become strings in object dtype)
     db.pull()
-    assert str(db['mixed'].data.get_row(1)['value']) == '42'
-    assert db['mixed'].data.get_row(2)['value'] == 'text'
+    assert str(db['mixed'].get_row(1)['value']) == '42'
+    assert db['mixed'].get_row(2)['value'] == 'text'
 
 
 def test_composite_pk_uniqueness_validation(tmp_path):
@@ -543,14 +543,14 @@ def test_composite_pk_uniqueness_validation(tmp_path):
     db.create_table('memberships', data, primary_key=['user_id', 'org_id'])
 
     # Same user_id but different org_id should work
-    db['memberships'].data.add_row({
+    db['memberships'].add_row({
         'user_id': 1,
         'org_id': 'org3',  # New org
         'role': 'guest'
     })
 
     # Same org_id but different user_id should work
-    db['memberships'].data.add_row({
+    db['memberships'].add_row({
         'user_id': 3,  # New user
         'org_id': 'org1',
         'role': 'member'
@@ -560,8 +560,8 @@ def test_composite_pk_uniqueness_validation(tmp_path):
 
     # Verify both added
     db.pull()
-    assert db['memberships'].data.row_exists((1, 'org3'))
-    assert db['memberships'].data.row_exists((3, 'org1'))
+    assert db['memberships'].row_exists((1, 'org3'))
+    assert db['memberships'].row_exists((3, 'org1'))
 
 
 def test_cascading_nulls_in_updates(tmp_path):
@@ -578,11 +578,11 @@ def test_cascading_nulls_in_updates(tmp_path):
     db.create_table('users', users, primary_key='id')
 
     # Remove manager relationship
-    db['users'].data.update_row(2, {'manager_id': None})
+    db['users'].update_row(2, {'manager_id': None})
 
     db.push()
 
     # Verify null set
     db.pull()
-    assert pd.isna(db['users'].data.get_row(2)['manager_id'])
+    assert pd.isna(db['users'].get_row(2)['manager_id'])
 

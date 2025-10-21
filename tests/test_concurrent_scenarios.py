@@ -22,7 +22,7 @@ def test_two_instances_non_overlapping_modifications(tmp_path):
 
     # Instance 1: Modify rows 1-50
     for i in range(1, 51):
-        db1['data'].data.update_row(i, {'value': i, 'updated_by': 'instance1'})
+        db1['data'].update_row(i, {'value': i, 'updated_by': 'instance1'})
 
     db1.push()
 
@@ -30,7 +30,7 @@ def test_two_instances_non_overlapping_modifications(tmp_path):
     db2 = DataBase(engine)
 
     for i in range(51, 101):
-        db2['data'].data.update_row(i, {'value': i, 'updated_by': 'instance2'})
+        db2['data'].update_row(i, {'value': i, 'updated_by': 'instance2'})
 
     db2.push()
 
@@ -39,12 +39,12 @@ def test_two_instances_non_overlapping_modifications(tmp_path):
     assert len(db_final['data']) == 100
 
     # Check instance 1 updates persisted
-    assert db_final['data'].data.get_row(25)['updated_by'] == 'instance1'
-    assert db_final['data'].data.get_row(25)['value'] == 25
+    assert db_final['data'].get_row(25)['updated_by'] == 'instance1'
+    assert db_final['data'].get_row(25)['value'] == 25
 
     # Check instance 2 updates persisted
-    assert db_final['data'].data.get_row(75)['updated_by'] == 'instance2'
-    assert db_final['data'].data.get_row(75)['value'] == 75
+    assert db_final['data'].get_row(75)['updated_by'] == 'instance2'
+    assert db_final['data'].get_row(75)['value'] == 75
 
 
 def test_last_writer_wins_scenario(tmp_path):
@@ -62,11 +62,11 @@ def test_last_writer_wins_scenario(tmp_path):
     db1.create_table('users', users, primary_key='id')
 
     # Instance 1: Read and modify
-    db1['users'].data.update_row(1, {'value': 200})
+    db1['users'].update_row(1, {'value': 200})
 
     # Instance 2: Read same data and modify differently
     db2 = DataBase(engine)
-    db2['users'].data.update_row(1, {'value': 300})
+    db2['users'].update_row(1, {'value': 300})
 
     # Instance 1 pushes first
     db1.push()
@@ -76,7 +76,7 @@ def test_last_writer_wins_scenario(tmp_path):
 
     # Verify last writer wins
     db_final = DataBase(engine)
-    assert db_final['users'].data.get_row(1)['value'] == 300  # Instance 2's value
+    assert db_final['users'].get_row(1)['value'] == 300  # Instance 2's value
 
 
 def test_pull_modify_push_pattern(tmp_path):
@@ -93,7 +93,7 @@ def test_pull_modify_push_pattern(tmp_path):
     db1.create_table('data', data, primary_key='id')
 
     # Instance 1: Modifies
-    db1['data'].data.update_row(1, {'value': 150})
+    db1['data'].update_row(1, {'value': 150})
     db1.push()
 
     # Instance 2: Uses recommended pattern
@@ -101,16 +101,16 @@ def test_pull_modify_push_pattern(tmp_path):
     db2.pull()  # Get fresh data
 
     # Verify instance 2 sees instance 1's changes
-    assert db2['data'].data.get_row(1)['value'] == 150
+    assert db2['data'].get_row(1)['value'] == 150
 
     # Make changes
-    db2['data'].data.update_row(2, {'value': 250})
+    db2['data'].update_row(2, {'value': 250})
     db2.push()
 
     # Verify both changes preserved
     db_final = DataBase(engine)
-    assert db_final['data'].data.get_row(1)['value'] == 150
-    assert db_final['data'].data.get_row(2)['value'] == 250
+    assert db_final['data'].get_row(1)['value'] == 150
+    assert db_final['data'].get_row(2)['value'] == 250
 
 
 def test_optimistic_locking_with_version_column(tmp_path):
@@ -128,19 +128,19 @@ def test_optimistic_locking_with_version_column(tmp_path):
     db1.create_table('data', data, primary_key='id')
 
     # Instance 1: Read version
-    row1_v1 = db1['data'].data.get_row(1)
+    row1_v1 = db1['data'].get_row(1)
     original_version = row1_v1['version']
 
     # Instance 2: Also reads and modifies
     db2 = DataBase(engine)
-    row1_v2 = db2['data'].data.get_row(1)
-    db2['data'].data.update_row(1, {'value': 150, 'version': row1_v2['version'] + 1})
+    row1_v2 = db2['data'].get_row(1)
+    db2['data'].update_row(1, {'value': 150, 'version': row1_v2['version'] + 1})
     db2.push()
 
     # Instance 1: Tries to update with stale version
     # First check if version changed
     db1.pull()
-    current_row = db1['data'].data.get_row(1)
+    current_row = db1['data'].get_row(1)
 
     if current_row['version'] != original_version:
         print("Detected stale data! Re-reading before update.")
@@ -149,13 +149,13 @@ def test_optimistic_locking_with_version_column(tmp_path):
         assert current_row['value'] == 150
 
         # Update with current version
-        db1['data'].data.update_row(1, {'value': 175, 'version': current_row['version'] + 1})
+        db1['data'].update_row(1, {'value': 175, 'version': current_row['version'] + 1})
         db1.push()
 
         # Verify final state
         db_final = DataBase(engine)
-        assert db_final['data'].data.get_row(1)['version'] == 3
-        assert db_final['data'].data.get_row(1)['value'] == 175
+        assert db_final['data'].get_row(1)['version'] == 3
+        assert db_final['data'].get_row(1)['value'] == 175
 
 
 def test_stale_data_detection(tmp_path):
@@ -172,16 +172,16 @@ def test_stale_data_detection(tmp_path):
     db1.create_table('data', data, primary_key='id')
 
     # Instance 1: Read data
-    original_checksum = db1['data'].data.get_row(1)['checksum']
+    original_checksum = db1['data'].get_row(1)['checksum']
 
     # Instance 2: Modify and push
     db2 = DataBase(engine)
-    db2['data'].data.update_row(1, {'value': 200, 'checksum': 'def456'})
+    db2['data'].update_row(1, {'value': 200, 'checksum': 'def456'})
     db2.push()
 
     # Instance 1: Before pushing, verify checksum
     db1.pull()
-    current_checksum = db1['data'].data.get_row(1)['checksum']
+    current_checksum = db1['data'].get_row(1)['checksum']
 
     if current_checksum != original_checksum:
         print("Data was modified by another process!")
@@ -205,13 +205,13 @@ def test_sequential_pushes_consistency(tmp_path):
     # Simulate 10 processes incrementing counter
     for _i in range(10):
         db = DataBase(engine)
-        current = db['counter'].data.get_row(1)['count']
-        db['counter'].data.update_row(1, {'count': current + 1})
+        current = db['counter'].get_row(1)['count']
+        db['counter'].update_row(1, {'count': current + 1})
         db.push()
 
     # Verify final count
     db_final = DataBase(engine)
-    assert db_final['counter'].data.get_row(1)['count'] == 10
+    assert db_final['counter'].get_row(1)['count'] == 10
 
 
 def test_concurrent_bulk_inserts_different_tables(tmp_path):
@@ -226,21 +226,21 @@ def test_concurrent_bulk_inserts_different_tables(tmp_path):
 
     # Instance 1: Bulk insert to table_a
     rows_a = [{'id': i, 'value': i * 10} for i in range(1, 1001)]
-    db1['table_a'].data.bulk_insert(rows_a)
+    db1['table_a'].bulk_insert(rows_a)
     db1.push()
 
     # Instance 2: Bulk insert to table_b
     db2 = DataBase(engine)
     rows_b = [{'id': i, 'value': i * 20} for i in range(1, 1001)]
-    db2['table_b'].data.bulk_insert(rows_b)
+    db2['table_b'].bulk_insert(rows_b)
     db2.push()
 
     # Verify both tables populated
     db_final = DataBase(engine)
     assert len(db_final['table_a']) == 1000
     assert len(db_final['table_b']) == 1000
-    assert db_final['table_a'].data.get_row(500)['value'] == 5000
-    assert db_final['table_b'].data.get_row(500)['value'] == 10000
+    assert db_final['table_a'].get_row(500)['value'] == 5000
+    assert db_final['table_b'].get_row(500)['value'] == 10000
 
 
 def test_concurrent_schema_changes_same_table(tmp_path):
@@ -256,17 +256,17 @@ def test_concurrent_schema_changes_same_table(tmp_path):
     db1.create_table('users', data, primary_key='id')
 
     # Instance 1: Add column_a
-    db1['users'].data.add_column_with_default('column_a', 'value_a')
+    db1['users'].add_column_with_default('column_a', 'value_a')
     db1.push()
 
     # Instance 2: Add column_b (after instance 1 pushed)
     db2 = DataBase(engine)
     db2.pull()  # Get latest schema
-    db2['users'].data.add_column_with_default('column_b', 'value_b')
+    db2['users'].add_column_with_default('column_b', 'value_b')
     db2.push()
 
     # Verify both columns exist
     db_final = DataBase(engine)
-    assert 'column_a' in db_final['users'].data.columns
-    assert 'column_b' in db_final['users'].data.columns
+    assert 'column_a' in db_final['users'].columns
+    assert 'column_b' in db_final['users'].columns
 

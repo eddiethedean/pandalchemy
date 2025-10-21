@@ -30,5 +30,5 @@ def test_main_module_version():
     )
 
     assert result.returncode == 0
-    assert '0.2.0' in result.stdout or '0.2.0' in result.stderr
+    assert '1.0.0' in result.stdout or '1.0.0' in result.stderr
 

@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from sqlalchemy import create_engine
 
-from pandalchemy import DataBase, Table
+from pandalchemy import DataBase, TableDataFrame
 
 
 def test_bulk_operations_reasonable_scale(tmp_path):
@@ -27,11 +27,11 @@ def test_bulk_operations_reasonable_scale(tmp_path):
     start = time.time()
 
     # Bulk update using vectorized operations
-    db['data'].data.loc[db['data'].data['category'] == 'A', 'value'] = \
-        db['data'].data.loc[db['data'].data['category'] == 'A', 'value'] * 2
+    db['data'].loc[db['data']['category'] == 'A', 'value'] = \
+        db['data'].loc[db['data']['category'] == 'A', 'value'] * 2
 
     # Add column
-    db['data'].data.add_column_with_default('processed', True)
+    db['data'].add_column_with_default('processed', True)
 
     # Push
     db.push()
@@ -43,7 +43,7 @@ def test_bulk_operations_reasonable_scale(tmp_path):
 
     # Verify
     db.pull()
-    assert 'processed' in db['data'].data.columns
+    assert 'processed' in db['data'].columns
 
 
 def test_chunked_processing_pattern(tmp_path):
@@ -57,7 +57,7 @@ def test_chunked_processing_pattern(tmp_path):
         'value': range(1, 5001),
         'processed': [False] * 5000
     })
-    table = Table('data', data, 'id', engine)
+    table = TableDataFrame('data', data, 'id', engine)
     table.push()
 
     # Process in 5 chunks of 1000
@@ -70,19 +70,19 @@ def test_chunked_processing_pattern(tmp_path):
         # Select chunk (vectorized)
         start_id = i * chunk_size + 1
         end_id = (i + 1) * chunk_size + 1
-        chunk_mask = (db['data'].data.index >= start_id) & (db['data'].data.index < end_id)
+        chunk_mask = (db['data'].index >= start_id) & (db['data'].index < end_id)
 
         # Update chunk (vectorized)
-        db['data'].data.loc[chunk_mask, 'value'] = \
-            db['data'].data.loc[chunk_mask, 'value'] * 2
-        db['data'].data.loc[chunk_mask, 'processed'] = True
+        db['data'].loc[chunk_mask, 'value'] = \
+            db['data'].loc[chunk_mask, 'value'] * 2
+        db['data'].loc[chunk_mask, 'processed'] = True
 
         # Push chunk
         db.push()
 
     # Verify all chunks processed
     db = DataBase(engine)
-    assert len(db['data'].data[db['data'].data['processed'] == True]) == 5000
+    assert len(db['data'][db['data']['processed'] == True]) == 5000
 
 
 def test_chunked_migration_pattern(tmp_path):
@@ -113,7 +113,7 @@ def test_chunked_migration_pattern(tmp_path):
         end_id = (i + 1) * chunk_size + 1
 
         # Get chunk (vectorized)
-        chunk = db['source'].data.to_pandas().loc[start_id:end_id-1]
+        chunk = db['source'].to_pandas().loc[start_id:end_id-1]
 
         # Transform (vectorized)
         chunk['first_name'] = chunk['full_name'].str.split(' ').str[0]
@@ -122,7 +122,7 @@ def test_chunked_migration_pattern(tmp_path):
 
         # Bulk insert into destination
         chunk_records = chunk.reset_index().to_dict('records')
-        db['dest'].data.bulk_insert(chunk_records)
+        db['dest'].bulk_insert(chunk_records)
 
         db['dest'].push()
 
@@ -149,16 +149,16 @@ def test_many_columns_operations(tmp_path):
     new_row = {'id': 4}
     for i in range(1, 51):
         new_row[f'col_{i}'] = i * 4
-    db['wide_table'].data.add_row(new_row)
+    db['wide_table'].add_row(new_row)
 
     # Update all rows for specific columns (vectorized)
-    db['wide_table'].data.loc[:, 'col_25'] = 999
+    db['wide_table'].loc[:, 'col_25'] = 999
 
     db.push()
 
     # Verify
     db.pull()
-    assert db['wide_table'].data.get_row(1)['col_25'] == 999
+    assert db['wide_table'].get_row(1)['col_25'] == 999
 
 
 def test_many_tables_transaction(tmp_path):
@@ -177,7 +177,7 @@ def test_many_tables_transaction(tmp_path):
 
     # Modify all (vectorized)
     for i in range(1, 11):
-        db[f'table_{i}'].data['value'] = db[f'table_{i}'].data['value'] * 2
+        db[f'table_{i}']['value'] = db[f'table_{i}']['value'] * 2
 
     # Push all at once
     start = time.time()
@@ -188,7 +188,7 @@ def test_many_tables_transaction(tmp_path):
 
     # Verify
     db.pull()
-    assert db['table_1'].data.get_row(1)['value'] == 20  # 10 * 2
+    assert db['table_1'].get_row(1)['value'] == 20  # 10 * 2
 
 
 def test_execution_plan_batching(tmp_path):
@@ -204,11 +204,11 @@ def test_execution_plan_batching(tmp_path):
     db.create_table('data', data, primary_key='id')
 
     # Update all rows (vectorized)
-    db['data'].data['value'] = db['data'].data.index * 2
+    db['data']['value'] = db['data'].index * 2
 
     # Check execution plan
     from pandalchemy.execution_plan import ExecutionPlan
-    tracker = db['data'].data.get_tracker()
+    tracker = db['data'].get_tracker()
     plan = ExecutionPlan(tracker, db['data'].to_pandas())
 
     summary = plan.get_summary()
@@ -217,5 +217,5 @@ def test_execution_plan_batching(tmp_path):
 
     db.push()
     db.pull()
-    assert db['data'].data.get_row(50)['value'] == 100
+    assert db['data'].get_row(50)['value'] == 100
 

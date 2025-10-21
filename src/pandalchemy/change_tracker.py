@@ -81,28 +81,26 @@ class ChangeTracker:
         self.added_columns: set[str] = set()
         self.dropped_columns: set[str] = set()
         self.renamed_columns: dict[str, str] = {}
+        self.altered_column_types: dict[str, type] = {}  # column_name -> new_type
 
         # Track original index for row identification
-        # Handle both single column (str) and composite (list) primary keys
-        if isinstance(primary_key, str):
-            if primary_key in original_data.columns:
-                self.original_index = set(original_data[primary_key].values)
-            elif original_data.index.name == primary_key:
-                self.original_index = set(original_data.index.values)
-            else:
-                self.original_index = set()
-        else:
-            # Composite primary key
-            pk_cols = list(primary_key)
-            if all(col in original_data.columns for col in pk_cols):
-                # Store tuples of composite key values
-                self.original_index = {tuple(row) for row in original_data[pk_cols].values}
-            elif isinstance(original_data.index, pd.MultiIndex) and \
-                 all(name in original_data.index.names for name in pk_cols):
-                # PK is in MultiIndex
-                self.original_index = set(original_data.index.values)
-            else:
-                self.original_index = set()
+        self.original_index = self._extract_original_index(original_data)
+
+    def _extract_original_index(self, data: pd.DataFrame) -> set[Any]:
+        """
+        Extract primary key values from DataFrame.
+
+        Handles both single column and composite primary keys.
+        Handles primary keys in both columns and index.
+
+        Args:
+            data: DataFrame to extract PK values from
+
+        Returns:
+            Set of primary key values (tuples for composite keys)
+        """
+        from pandalchemy.pk_utils import extract_pk_values
+        return extract_pk_values(data, self.primary_key)
 
     def record_operation(self, method_name: str, *args, **kwargs) -> None:
         """
@@ -157,6 +155,16 @@ class ChangeTracker:
             new_name: New column name
         """
         self.renamed_columns[old_name] = new_name
+
+    def track_column_type_change(self, column_name: str, new_type: type) -> None:
+        """
+        Track a column type change.
+
+        Args:
+            column_name: Name of the column
+            new_type: New data type for the column
+        """
+        self.altered_column_types[column_name] = new_type
 
     def compute_row_changes(self, current_data: pd.DataFrame) -> None:
         """
@@ -261,10 +269,10 @@ class ChangeTracker:
                         orig_val = original_row[col]
 
                         # Check if both are NaN
-                        if pd.isna(curr_val) and pd.isna(orig_val):
-                            continue
+                        if pd.isna(curr_val) and pd.isna(orig_val):  # type: ignore[unreachable]
+                            continue  # type: ignore[unreachable]
                         # Check if values differ
-                        if curr_val != orig_val:
+                        if curr_val != orig_val:  # type: ignore[unreachable]
                             is_different = True
                             break
 
@@ -272,16 +280,16 @@ class ChangeTracker:
                         self.row_changes[key] = RowChange(
                             change_type=ChangeType.UPDATE,
                             primary_key_value=key,
-                            old_data=original_row.to_dict(),
-                            new_data=current_row.to_dict()
+                            old_data=original_row.to_dict(),  # type: ignore[arg-type]
+                            new_data=current_row.to_dict()  # type: ignore[arg-type]
                         )
             except (ValueError, TypeError):
                 # If comparison fails, assume they're different
                 self.row_changes[key] = RowChange(
                     change_type=ChangeType.UPDATE,
                     primary_key_value=key,
-                    old_data=original_row.to_dict(),
-                    new_data=current_row.to_dict()
+                    old_data=original_row.to_dict(),  # type: ignore[arg-type]
+                    new_data=current_row.to_dict()  # type: ignore[arg-type]
                 )
 
     def get_inserts(self) -> list[RowChange]:
@@ -310,7 +318,8 @@ class ChangeTracker:
             len(self.row_changes) > 0 or
             len(self.added_columns) > 0 or
             len(self.dropped_columns) > 0 or
-            len(self.renamed_columns) > 0
+            len(self.renamed_columns) > 0 or
+            len(self.altered_column_types) > 0
         )
 
     def reset(self, new_data: pd.DataFrame) -> None:
@@ -327,13 +336,10 @@ class ChangeTracker:
         self.added_columns.clear()
         self.dropped_columns.clear()
         self.renamed_columns.clear()
+        self.altered_column_types.clear()
 
-        if self.primary_key in new_data.columns:
-            self.original_index = set(new_data[self.primary_key].values)
-        elif new_data.index.name == self.primary_key:
-            self.original_index = set(new_data.index.values)
-        else:
-            self.original_index = set()
+        # Use same extraction logic as __init__ - handles both single and composite keys
+        self.original_index = self._extract_original_index(new_data)
 
     def get_summary(self) -> dict[str, Any]:
         """
@@ -350,6 +356,7 @@ class ChangeTracker:
             "columns_added": len(self.added_columns),
             "columns_dropped": len(self.dropped_columns),
             "columns_renamed": len(self.renamed_columns),
+            "columns_type_changed": len(self.altered_column_types),
             "has_changes": self.has_changes()
         }
 

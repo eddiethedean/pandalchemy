@@ -1,10 +1,10 @@
-"""Tests for the TrackedDataFrame class."""
+"""Tests for the TableDataFrame class."""
 
 import pandas as pd
 import pytest
 
 from pandalchemy.change_tracker import ChangeTracker
-from pandalchemy.tracked_dataframe import TrackedDataFrame
+from pandalchemy.tracked_dataframe import TableDataFrame
 
 
 @pytest.fixture
@@ -18,8 +18,8 @@ def sample_dataframe():
 
 
 def test_tracked_dataframe_initialization(sample_dataframe):
-    """Test TrackedDataFrame initialization."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    """Test TableDataFrame initialization."""
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     assert len(tdf) == 3
     assert 'name' in tdf.columns
@@ -28,7 +28,7 @@ def test_tracked_dataframe_initialization(sample_dataframe):
 
 def test_getitem(sample_dataframe):
     """Test __getitem__ access."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # Column access
     names = tdf['name']
@@ -40,7 +40,7 @@ def test_getitem(sample_dataframe):
 
 def test_setitem_existing_column(sample_dataframe):
     """Test __setitem__ on existing column."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     tdf['age'] = [26, 31, 36]
 
@@ -55,7 +55,7 @@ def test_setitem_existing_column(sample_dataframe):
 
 def test_setitem_new_column(sample_dataframe):
     """Test __setitem__ for adding a new column."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     tdf['email'] = ['alice@test.com', 'bob@test.com', 'charlie@test.com']
 
@@ -66,7 +66,7 @@ def test_setitem_new_column(sample_dataframe):
 
 def test_delitem(sample_dataframe):
     """Test __delitem__ for dropping columns."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     del tdf['age']
 
@@ -77,7 +77,7 @@ def test_delitem(sample_dataframe):
 
 def test_loc_getitem(sample_dataframe):
     """Test loc indexer for getting values."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     value = tdf.loc[1, 'name']
     assert value == 'Alice'
@@ -85,7 +85,7 @@ def test_loc_getitem(sample_dataframe):
 
 def test_loc_setitem(sample_dataframe):
     """Test loc indexer for setting values."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     tdf.loc[1, 'age'] = 26
 
@@ -98,7 +98,7 @@ def test_loc_setitem(sample_dataframe):
 
 def test_iloc_setitem(sample_dataframe):
     """Test iloc indexer for setting values."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     tdf.iloc[0, 1] = 26  # Change age of first row
 
@@ -108,28 +108,28 @@ def test_iloc_setitem(sample_dataframe):
 
 def test_shape_property(sample_dataframe):
     """Test shape property."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     assert tdf.shape == (3, 2)
 
 
 def test_columns_property(sample_dataframe):
     """Test columns property."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     assert list(tdf.columns) == ['name', 'age']
 
 
 def test_index_property(sample_dataframe):
     """Test index property."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     assert list(tdf.index) == [1, 2, 3]
 
 
 def test_to_pandas(sample_dataframe):
     """Test converting to pandas DataFrame."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     df = tdf.to_pandas()
 
@@ -138,12 +138,12 @@ def test_to_pandas(sample_dataframe):
 
 
 def test_copy(sample_dataframe):
-    """Test copying TrackedDataFrame."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    """Test copying TableDataFrame."""
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     tdf_copy = tdf.copy()
 
-    assert isinstance(tdf_copy, TrackedDataFrame)
+    assert isinstance(tdf_copy, TableDataFrame)
     assert tdf_copy._data.equals(tdf._data)
 
     # Modify copy and ensure original is unchanged
@@ -153,7 +153,7 @@ def test_copy(sample_dataframe):
 
 def test_drop_method(sample_dataframe):
     """Test drop method."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     tdf.drop('age', axis=1, inplace=True)
 
@@ -163,7 +163,7 @@ def test_drop_method(sample_dataframe):
 
 def test_rename_method(sample_dataframe):
     """Test rename method."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     tdf.rename(columns={'name': 'full_name'}, inplace=True)
 
@@ -174,7 +174,7 @@ def test_rename_method(sample_dataframe):
 
 def test_sort_values_method(sample_dataframe):
     """Test sort_values method."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     tdf.sort_values('age', ascending=False, inplace=True)
 
@@ -185,15 +185,15 @@ def test_sort_values_method(sample_dataframe):
 
 def test_repr(sample_dataframe):
     """Test string representation."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     repr_str = repr(tdf)
-    assert 'TrackedDataFrame' in repr_str
+    assert 'TableDataFrame' in repr_str
 
 
 def test_str(sample_dataframe):
     """Test str representation."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     str_repr = str(tdf)
     assert isinstance(str_repr, str)
@@ -201,7 +201,7 @@ def test_str(sample_dataframe):
 
 def test_get_tracker(sample_dataframe):
     """Test getting the change tracker."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     tracker = tdf.get_tracker()
 
@@ -211,7 +211,7 @@ def test_get_tracker(sample_dataframe):
 
 def test_columns_setter(sample_dataframe):
     """Test setting columns property."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     tdf.columns = ['full_name', 'years']
 
@@ -224,7 +224,7 @@ def test_index_setter(sample_dataframe):
     """Test that setting index is blocked (PK immutability)."""
     from pandalchemy.exceptions import DataValidationError
 
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # Index setter should raise DataValidationError (PKs are immutable)
     with pytest.raises(DataValidationError, match="Cannot modify index directly"):
@@ -233,7 +233,7 @@ def test_index_setter(sample_dataframe):
 
 def test_values_property(sample_dataframe):
     """Test values property."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     values = tdf.values
     assert values.shape == (3, 2)
@@ -241,7 +241,7 @@ def test_values_property(sample_dataframe):
 
 def test_dtypes_property(sample_dataframe):
     """Test dtypes property."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     dtypes = tdf.dtypes
     assert 'name' in dtypes
@@ -250,7 +250,7 @@ def test_dtypes_property(sample_dataframe):
 
 def test_multiple_operations(sample_dataframe):
     """Test tracking multiple operations."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # Perform multiple operations
     tdf['email'] = ['a@test.com', 'b@test.com', 'c@test.com']
@@ -267,7 +267,7 @@ def test_multiple_operations(sample_dataframe):
 
 def test_at_indexer(sample_dataframe):
     """Test at indexer."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # Get value
     value = tdf.at[1, 'name']
@@ -281,7 +281,7 @@ def test_at_indexer(sample_dataframe):
 
 def test_iat_indexer(sample_dataframe):
     """Test iat indexer."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # Get value
     value = tdf.iat[0, 0]
@@ -298,7 +298,7 @@ def test_fillna_method(sample_dataframe):
     df_with_nan = sample_dataframe.copy()
     df_with_nan.loc[1, 'age'] = None
 
-    tdf = TrackedDataFrame(df_with_nan, 'id')
+    tdf = TableDataFrame(data=df_with_nan, primary_key='id')
 
     tdf.fillna(0, inplace=True)
 
@@ -311,7 +311,7 @@ def test_dropna_method(sample_dataframe):
     df_with_nan = sample_dataframe.copy()
     df_with_nan.loc[1, 'age'] = None
 
-    tdf = TrackedDataFrame(df_with_nan, 'id')
+    tdf = TableDataFrame(data=df_with_nan, primary_key='id')
 
     tdf.dropna(inplace=True)
 
@@ -321,7 +321,7 @@ def test_dropna_method(sample_dataframe):
 
 def test_reset_index_method(sample_dataframe):
     """Test reset_index method."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     tdf.reset_index(inplace=True)
 
@@ -331,7 +331,7 @@ def test_reset_index_method(sample_dataframe):
 
 def test_replace_method(sample_dataframe):
     """Test replace method."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     tdf.replace('Alice', 'Alicia', inplace=True)
 
@@ -341,7 +341,7 @@ def test_replace_method(sample_dataframe):
 
 def test_update_method(sample_dataframe):
     """Test update method."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     other = pd.DataFrame({'age': [100]}, index=[1])
     other.index.name = 'id'
@@ -354,7 +354,7 @@ def test_update_method(sample_dataframe):
 
 def test_insert_method(sample_dataframe):
     """Test insert method."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     tdf.insert(0, 'new_col', ['X', 'Y', 'Z'])
 
@@ -365,7 +365,7 @@ def test_insert_method(sample_dataframe):
 
 def test_pop_method(sample_dataframe):
     """Test pop method."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     popped = tdf.pop('age')
 
@@ -377,7 +377,7 @@ def test_pop_method(sample_dataframe):
 
 def test_getattr_delegation(sample_dataframe):
     """Test that __getattr__ properly delegates to DataFrame."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # Test accessing DataFrame methods
     assert hasattr(tdf, 'mean')
@@ -387,7 +387,7 @@ def test_getattr_delegation(sample_dataframe):
 
 def test_internal_attribute_access(sample_dataframe):
     """Test that internal attributes are not delegated."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # Should be able to access internal attributes
     assert tdf._data is not None
@@ -397,7 +397,7 @@ def test_internal_attribute_access(sample_dataframe):
 
 def test_repr_html(sample_dataframe):
     """Test _repr_html_ for Jupyter notebooks."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     html = tdf._repr_html_()
 
@@ -410,7 +410,7 @@ def test_bfill_method(sample_dataframe):
     df_with_nan = sample_dataframe.copy()
     df_with_nan.loc[1, 'age'] = None
 
-    tdf = TrackedDataFrame(df_with_nan, 'id')
+    tdf = TableDataFrame(data=df_with_nan, primary_key='id')
 
     tdf.bfill(inplace=True)
 
@@ -423,7 +423,7 @@ def test_ffill_method(sample_dataframe):
     df_with_nan = sample_dataframe.copy()
     df_with_nan.loc[1, 'age'] = None
 
-    tdf = TrackedDataFrame(df_with_nan, 'id')
+    tdf = TableDataFrame(data=df_with_nan, primary_key='id')
 
     tdf.ffill(inplace=True)
 
@@ -436,7 +436,7 @@ def test_interpolate_method(sample_dataframe):
     df_with_nan = sample_dataframe.copy()
     df_with_nan.loc[2, 'age'] = None
 
-    tdf = TrackedDataFrame(df_with_nan, 'id')
+    tdf = TableDataFrame(data=df_with_nan, primary_key='id')
 
     tdf.interpolate(inplace=True)
 
@@ -452,7 +452,7 @@ def test_clip_method():
         'value2': [100, 200, 300]
     }, index=pd.Index([1, 2, 3], name='id'))
 
-    tdf = TrackedDataFrame(df, 'id')
+    tdf = TableDataFrame(data=df, primary_key='id')
 
     # Clip numeric values
     tdf.clip(lower=15, upper=250, inplace=True)
@@ -463,7 +463,7 @@ def test_clip_method():
 
 def test_mask_method(sample_dataframe):
     """Test mask method."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     tdf.mask(tdf['age'] > 30, other=30, inplace=True)
 
@@ -473,7 +473,7 @@ def test_mask_method(sample_dataframe):
 
 def test_where_method(sample_dataframe):
     """Test where method."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     tdf.where(tdf['age'] <= 30, other=99, inplace=True)
 
@@ -483,14 +483,14 @@ def test_where_method(sample_dataframe):
 
 def test_add_prefix_method(sample_dataframe):
     """Test add_prefix method."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # add_prefix returns a new DataFrame (tracked via __getattr__)
     result = tdf.add_prefix('prefix_')
 
     # Since it goes through __getattr__ and is in _RETURNING_METHODS,
     # it should return wrapped result if it's a DataFrame
-    if isinstance(result, TrackedDataFrame):
+    if isinstance(result, TableDataFrame):
         assert 'prefix_name' in result.columns
     else:
         # If not wrapped, at least verify it's a DataFrame
@@ -499,14 +499,14 @@ def test_add_prefix_method(sample_dataframe):
 
 def test_add_suffix_method(sample_dataframe):
     """Test add_suffix method."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # add_suffix returns a new DataFrame (tracked via __getattr__)
     result = tdf.add_suffix('_suffix')
 
     # Since it goes through __getattr__ and is in _RETURNING_METHODS,
     # it should return wrapped result if it's a DataFrame
-    if isinstance(result, TrackedDataFrame):
+    if isinstance(result, TableDataFrame):
         assert 'name_suffix' in result.columns
     else:
         # If not wrapped, at least verify it's a DataFrame
@@ -515,7 +515,7 @@ def test_add_suffix_method(sample_dataframe):
 
 def test_align_method(sample_dataframe):
     """Test align method."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     other = pd.DataFrame({'name': ['David'], 'age': [40]}, index=[4])
     other.index.name = 'id'
@@ -529,31 +529,31 @@ def test_align_method(sample_dataframe):
 
 def test_reindex_method(sample_dataframe):
     """Test reindex method."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # reindex returns a new DataFrame
     result = tdf.reindex([1, 2, 3, 4], fill_value=0)
 
     # Verify it returns a DataFrame (wrapped or not)
-    assert isinstance(result, (TrackedDataFrame, pd.DataFrame))
+    assert isinstance(result, (TableDataFrame, pd.DataFrame))
     assert len(result) == 4
 
 
 def test_truncate_method(sample_dataframe):
     """Test truncate method."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # truncate returns a new DataFrame
     result = tdf.truncate(before=2, after=3)
 
     # Verify it returns a DataFrame (wrapped or not)
-    assert isinstance(result, (TrackedDataFrame, pd.DataFrame))
+    assert isinstance(result, (TableDataFrame, pd.DataFrame))
     assert len(result) <= 2
 
 
 def test_eval_method(sample_dataframe):
     """Test eval method."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # Eval can mutate with inplace=True
     tdf.eval('new_age = age * 2', inplace=True)
@@ -564,8 +564,8 @@ def test_eval_method(sample_dataframe):
 
 
 def test_head_returns_independent_tracker(sample_dataframe):
-    """Test that head() returns TrackedDataFrame with independent tracker."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    """Test that head() returns TableDataFrame with independent tracker."""
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # Get subset
     subset = tdf.head(2)
@@ -583,8 +583,8 @@ def test_head_returns_independent_tracker(sample_dataframe):
 
 
 def test_tail_returns_independent_tracker(sample_dataframe):
-    """Test that tail() returns TrackedDataFrame with independent tracker."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    """Test that tail() returns TableDataFrame with independent tracker."""
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # Get subset
     subset = tdf.tail(2)
@@ -600,8 +600,8 @@ def test_tail_returns_independent_tracker(sample_dataframe):
 
 
 def test_copy_returns_independent_tracker(sample_dataframe):
-    """Test that copy() returns TrackedDataFrame with independent tracker."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    """Test that copy() returns TableDataFrame with independent tracker."""
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # Make a copy
     copy_tdf = tdf.copy()
@@ -617,14 +617,14 @@ def test_copy_returns_independent_tracker(sample_dataframe):
 
 
 def test_filter_returns_independent_tracker(sample_dataframe):
-    """Test that filter() returns TrackedDataFrame with independent tracker."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    """Test that filter() returns TableDataFrame with independent tracker."""
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # Filter columns
     filtered = tdf.filter(items=['name'])
 
     # Modify filtered
-    if isinstance(filtered, TrackedDataFrame):
+    if isinstance(filtered, TableDataFrame):
         filtered['name'] = ['A', 'B', 'C']
 
         # Original should have no changes
@@ -633,12 +633,12 @@ def test_filter_returns_independent_tracker(sample_dataframe):
 
 def test_getitem_slice_independent_tracker(sample_dataframe):
     """Test that __getitem__ with slice returns independent tracker."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # Get subset via slicing (if it returns DataFrame)
     result = tdf[['name', 'age']]
 
-    if isinstance(result, TrackedDataFrame):
+    if isinstance(result, TableDataFrame):
         # Modify the result
         result['age'] = [100, 200, 300]
 
@@ -651,12 +651,12 @@ def test_getitem_slice_independent_tracker(sample_dataframe):
 
 def test_loc_slice_independent_tracker(sample_dataframe):
     """Test that loc slicing returns independent tracker."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # Get subset via loc
     subset = tdf.loc[[1, 2]]
 
-    if isinstance(subset, TrackedDataFrame):
+    if isinstance(subset, TableDataFrame):
         # Modify subset
         subset['age'] = [100, 200]
 
@@ -669,12 +669,12 @@ def test_loc_slice_independent_tracker(sample_dataframe):
 
 def test_iloc_slice_independent_tracker(sample_dataframe):
     """Test that iloc slicing returns independent tracker."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # Get subset via iloc
     subset = tdf.iloc[0:2]
 
-    if isinstance(subset, TrackedDataFrame):
+    if isinstance(subset, TableDataFrame):
         # Modify subset
         subset['name'] = ['X', 'Y']
 
@@ -687,12 +687,12 @@ def test_iloc_slice_independent_tracker(sample_dataframe):
 
 def test_query_returns_independent_tracker(sample_dataframe):
     """Test that query() returns independent tracker."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # Query for subset
     result = tdf.query('age > 25')
 
-    if isinstance(result, TrackedDataFrame):
+    if isinstance(result, TableDataFrame):
         # Modify result
         result['age'] = [100, 200]
 
@@ -705,12 +705,12 @@ def test_query_returns_independent_tracker(sample_dataframe):
 
 def test_mutating_method_with_inplace_false(sample_dataframe):
     """Test that mutating method with inplace=False returns independent tracker."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # Drop with inplace=False returns new DataFrame
     result = tdf.drop('age', axis=1, inplace=False)
 
-    if isinstance(result, TrackedDataFrame):
+    if isinstance(result, TableDataFrame):
         # Modify result
         result['name'] = ['X', 'Y', 'Z']
 
@@ -726,12 +726,12 @@ def test_mutating_method_with_inplace_false(sample_dataframe):
 
 def test_assign_returns_independent_tracker(sample_dataframe):
     """Test that assign() returns independent tracker."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # Use assign to add a new column
     result = tdf.assign(new_col=lambda x: x['age'] * 2)
 
-    if isinstance(result, TrackedDataFrame):
+    if isinstance(result, TableDataFrame):
         # Result should have new column
         assert 'new_col' in result.columns
 
@@ -750,7 +750,7 @@ def test_assign_returns_independent_tracker(sample_dataframe):
 
 def test_merge_returns_independent_tracker(sample_dataframe):
     """Test that merge() returns independent tracker."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # Create another DataFrame to merge
     other_df = pd.DataFrame({'id': [1, 2], 'salary': [50000, 60000]})
@@ -758,7 +758,7 @@ def test_merge_returns_independent_tracker(sample_dataframe):
     # Merge
     result = tdf.merge(other_df, on='id')
 
-    if isinstance(result, TrackedDataFrame):
+    if isinstance(result, TableDataFrame):
         # Result should have salary column
         assert 'salary' in result.columns
 
@@ -771,12 +771,12 @@ def test_merge_returns_independent_tracker(sample_dataframe):
 
 def test_rank_returns_independent_tracker(sample_dataframe):
     """Test that rank() returns independent tracker."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # Rank by age
     result = tdf[['age']].rank()
 
-    if isinstance(result, TrackedDataFrame):
+    if isinstance(result, TableDataFrame):
         # Modify result
         result['age'] = [10, 20, 30]
 
@@ -786,12 +786,12 @@ def test_rank_returns_independent_tracker(sample_dataframe):
 
 def test_nlargest_returns_independent_tracker(sample_dataframe):
     """Test that nlargest() returns independent tracker."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # Get 2 largest by age
     result = tdf.nlargest(2, 'age')
 
-    if isinstance(result, TrackedDataFrame):
+    if isinstance(result, TableDataFrame):
         assert len(result) == 2
 
         # Modify result
@@ -803,12 +803,12 @@ def test_nlargest_returns_independent_tracker(sample_dataframe):
 
 def test_abs_returns_independent_tracker(sample_dataframe):
     """Test that abs() returns independent tracker."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # Apply abs (on numeric columns)
     result = tdf[['age']].abs()
 
-    if isinstance(result, TrackedDataFrame):
+    if isinstance(result, TableDataFrame):
         # Modify result
         result['age'] = [100, 200, 300]
 
@@ -818,12 +818,12 @@ def test_abs_returns_independent_tracker(sample_dataframe):
 
 def test_transpose_returns_independent_tracker(sample_dataframe):
     """Test that transpose() returns independent tracker."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # Transpose
     result = tdf[['age']].transpose()
 
-    if isinstance(result, TrackedDataFrame):
+    if isinstance(result, TableDataFrame):
         # Modify result (column names are now row indices)
         result[0] = [999]
 
@@ -833,12 +833,12 @@ def test_transpose_returns_independent_tracker(sample_dataframe):
 
 def test_diff_returns_independent_tracker(sample_dataframe):
     """Test that diff() returns independent tracker."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # Calculate differences
     result = tdf[['age']].diff()
 
-    if isinstance(result, TrackedDataFrame):
+    if isinstance(result, TableDataFrame):
         # Modify result
         result['age'] = [100, 200, 300]
 
@@ -848,12 +848,12 @@ def test_diff_returns_independent_tracker(sample_dataframe):
 
 def test_shift_returns_independent_tracker(sample_dataframe):
     """Test that shift() returns independent tracker."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # Shift values
     result = tdf.shift(1)
 
-    if isinstance(result, TrackedDataFrame):
+    if isinstance(result, TableDataFrame):
         # Modify result
         result['age'] = [100, 200, 300]
 
@@ -863,12 +863,12 @@ def test_shift_returns_independent_tracker(sample_dataframe):
 
 def test_isin_returns_independent_tracker(sample_dataframe):
     """Test that isin() returns independent tracker (boolean DataFrame)."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # Check if values are in list
     result = tdf[['age']].isin([25, 30])
 
-    if isinstance(result, TrackedDataFrame):
+    if isinstance(result, TableDataFrame):
         # Result should be boolean DataFrame
         assert result['age'].dtype == bool
 
@@ -881,12 +881,12 @@ def test_isin_returns_independent_tracker(sample_dataframe):
 
 def test_round_returns_independent_tracker(sample_dataframe):
     """Test that round() returns independent tracker."""
-    tdf = TrackedDataFrame(sample_dataframe, 'id')
+    tdf = TableDataFrame(sample_dataframe, 'id')
 
     # Round numeric columns
     result = tdf[['age']].round(0)
 
-    if isinstance(result, TrackedDataFrame):
+    if isinstance(result, TableDataFrame):
         # Modify result
         result['age'] = [100, 200, 300]
 

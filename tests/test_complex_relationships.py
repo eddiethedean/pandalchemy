@@ -21,25 +21,25 @@ def test_hierarchical_categories_tree(tmp_path):
     db.create_table('categories', categories, primary_key='id')
 
     # Add new subcategory
-    db['categories'].data.add_row({
+    db['categories'].add_row({
         'id': 7,
         'name': 'Gaming Laptops',
         'parent_id': 3  # Under Laptops
     })
 
     # Move category to different parent
-    db['categories'].data.update_row(6, {'parent_id': 1})  # Move Smartphones under Electronics
+    db['categories'].update_row(6, {'parent_id': 1})  # Move Smartphones under Electronics
 
     # Delete category (would need cascade in real app)
-    db['categories'].data.delete_row(4)  # Delete Desktops
+    db['categories'].delete_row(4)  # Delete Desktops
 
     db.push()
 
     # Verify hierarchy
     db.pull()
-    assert db['categories'].data.get_row(7)['parent_id'] == 3
-    assert db['categories'].data.get_row(6)['parent_id'] == 1
-    assert not db['categories'].data.row_exists(4)
+    assert db['categories'].get_row(7)['parent_id'] == 3
+    assert db['categories'].get_row(6)['parent_id'] == 1
+    assert not db['categories'].row_exists(4)
 
 
 def test_many_to_many_with_enrollment_attributes(tmp_path):
@@ -74,7 +74,7 @@ def test_many_to_many_with_enrollment_attributes(tmp_path):
     db.create_table('enrollments', enrollments, primary_key=['student_id', 'course_id'])
 
     # Enroll new student in course
-    db['enrollments'].data.add_row({
+    db['enrollments'].add_row({
         'student_id': 4,
         'course_id': 101,
         'grade': None,
@@ -82,11 +82,11 @@ def test_many_to_many_with_enrollment_attributes(tmp_path):
     })
 
     # Update grade for completed course
-    db['enrollments'].data.update_row((1, 101), {'grade': 'A', 'status': 'completed'})
-    db['enrollments'].data.update_row((1, 102), {'grade': 'B+', 'status': 'completed'})
+    db['enrollments'].update_row((1, 101), {'grade': 'A', 'status': 'completed'})
+    db['enrollments'].update_row((1, 102), {'grade': 'B+', 'status': 'completed'})
 
     # Drop course
-    db['enrollments'].data.delete_row((3, 102))
+    db['enrollments'].delete_row((3, 102))
 
     db.push()
 
@@ -95,9 +95,9 @@ def test_many_to_many_with_enrollment_attributes(tmp_path):
 
     # Get completed enrollments for student 1
     db.pull()
-    student_1_enrollments = db['enrollments'].data[
-        (db['enrollments'].data.index.get_level_values('student_id') == 1) &
-        (db['enrollments'].data['status'] == 'completed')
+    student_1_enrollments = db['enrollments'][
+        (db['enrollments'].index.get_level_values('student_id') == 1) &
+        (db['enrollments']['status'] == 'completed')
     ]
 
     total_points = 0
@@ -106,21 +106,21 @@ def test_many_to_many_with_enrollment_attributes(tmp_path):
         course_id = idx[1]
         grade = enrollment['grade']
         if grade in grade_points:
-            credits = db['courses'].data.get_row(course_id)['credits']
+            credits = db['courses'].get_row(course_id)['credits']
             total_points += grade_points[grade] * credits
             total_credits += credits
 
     if total_credits > 0:
         gpa = total_points / total_credits
-        db['students'].data.update_row(1, {'gpa': round(gpa, 2)})
+        db['students'].update_row(1, {'gpa': round(gpa, 2)})
 
     db.push()
 
     # Verify
     db.pull()
-    assert db['students'].data.get_row(1)['gpa'] > 0
-    assert db['enrollments'].data.row_exists((4, 101))
-    assert not db['enrollments'].data.row_exists((3, 102))
+    assert db['students'].get_row(1)['gpa'] > 0
+    assert db['enrollments'].row_exists((4, 101))
+    assert not db['enrollments'].row_exists((3, 102))
 
 
 def test_bulk_enrollment_semester_registration(tmp_path):
@@ -176,7 +176,7 @@ def test_bulk_enrollment_semester_registration(tmp_path):
             'status': 'enrolled'
         })
 
-    db['enrollments'].data.bulk_insert(enrollments_to_add)
+    db['enrollments'].bulk_insert(enrollments_to_add)
     db.push()
 
     # Verify enrollment counts
@@ -185,9 +185,9 @@ def test_bulk_enrollment_semester_registration(tmp_path):
     assert total_enrollments == 80  # 30 + 25 + 25
 
     # Verify specific enrollments
-    assert db['enrollments'].data.row_exists((1, 101))
-    assert db['enrollments'].data.row_exists((25, 102))
-    assert db['enrollments'].data.row_exists((50, 103))
+    assert db['enrollments'].row_exists((1, 101))
+    assert db['enrollments'].row_exists((25, 102))
+    assert db['enrollments'].row_exists((50, 103))
 
 
 def test_multi_level_organization_hierarchy(tmp_path):
@@ -240,14 +240,14 @@ def test_multi_level_organization_hierarchy(tmp_path):
     db.create_table('assignments', assignments, primary_key=['employee_id', 'project_id'])
 
     # Reorganization: Move Backend team to different department
-    db['teams'].data.update_row(10, {'department_id': 2})  # Engineering -> Sales
+    db['teams'].update_row(10, {'department_id': 2})  # Engineering -> Sales
 
     # Promote employee
-    db['employees'].data.update_row(101, {'salary': 105000})
+    db['employees'].update_row(101, {'salary': 105000})
 
     # Reassign employee to different project
-    db['assignments'].data.delete_row((101, 1))
-    db['assignments'].data.add_row({
+    db['assignments'].delete_row((101, 1))
+    db['assignments'].add_row({
         'employee_id': 101,
         'project_id': 2,
         'role': 'developer',
@@ -255,13 +255,13 @@ def test_multi_level_organization_hierarchy(tmp_path):
     })
 
     # Add new employee and assign to project
-    db['employees'].data.add_row({
+    db['employees'].add_row({
         'id': 105,
         'name': 'Frank',
         'team_id': 10,
         'salary': 92000
     })
-    db['assignments'].data.add_row({
+    db['assignments'].add_row({
         'employee_id': 105,
         'project_id': 1,
         'role': 'developer',
@@ -272,11 +272,11 @@ def test_multi_level_organization_hierarchy(tmp_path):
 
     # Verify multi-level consistency
     db.pull()
-    assert db['teams'].data.get_row(10)['department_id'] == 2
-    assert db['employees'].data.get_row(101)['salary'] == 105000
-    assert not db['assignments'].data.row_exists((101, 1))
-    assert db['assignments'].data.row_exists((101, 2))
-    assert db['employees'].data.row_exists(105)
+    assert db['teams'].get_row(10)['department_id'] == 2
+    assert db['employees'].get_row(101)['salary'] == 105000
+    assert not db['assignments'].row_exists((101, 1))
+    assert db['assignments'].row_exists((101, 2))
+    assert db['employees'].row_exists(105)
 
 
 def test_circular_reference_tables(tmp_path):
@@ -304,32 +304,32 @@ def test_circular_reference_tables(tmp_path):
     db.create_table('cities', cities, primary_key='id')
 
     # Now update countries with capital city references
-    db['countries'].data.update_row(1, {'capital_city_id': 10})
-    db['countries'].data.update_row(2, {'capital_city_id': 20})
-    db['countries'].data.update_row(3, {'capital_city_id': 30})
+    db['countries'].update_row(1, {'capital_city_id': 10})
+    db['countries'].update_row(2, {'capital_city_id': 20})
+    db['countries'].update_row(3, {'capital_city_id': 30})
 
     # Add new country and city
-    db['countries'].data.add_row({
+    db['countries'].add_row({
         'id': 4,
         'name': 'Germany',
         'capital_city_id': None
     })
-    db['cities'].data.add_row({
+    db['cities'].add_row({
         'id': 40,
         'name': 'Berlin',
         'country_id': 4,
         'population': 3700000
     })
-    db['countries'].data.update_row(4, {'capital_city_id': 40})
+    db['countries'].update_row(4, {'capital_city_id': 40})
 
     db.push()
 
     # Verify circular references maintained
     db.pull()
-    assert db['countries'].data.get_row(1)['capital_city_id'] == 10
-    assert db['cities'].data.get_row(10)['country_id'] == 1
-    assert db['countries'].data.get_row(4)['capital_city_id'] == 40
-    assert db['cities'].data.get_row(40)['country_id'] == 4
+    assert db['countries'].get_row(1)['capital_city_id'] == 10
+    assert db['cities'].get_row(10)['country_id'] == 1
+    assert db['countries'].get_row(4)['capital_city_id'] == 40
+    assert db['cities'].get_row(40)['country_id'] == 4
 
 
 def test_multi_level_join_updates(tmp_path):
@@ -382,15 +382,15 @@ def test_multi_level_join_updates(tmp_path):
 
     # Complex update: Company-wide salary increase
     # Increase all employee rates by 10%
-    for employee_id in db['employees'].data.index:
-        current_rate = db['employees'].data.get_row(employee_id)['hourly_rate']
-        db['employees'].data.update_row(employee_id, {'hourly_rate': current_rate * 1.1})
+    for employee_id in db['employees'].index:
+        current_rate = db['employees'].get_row(employee_id)['hourly_rate']
+        db['employees'].update_row(employee_id, {'hourly_rate': current_rate * 1.1})
 
     # Calculate total labor cost per team
     team_costs = {}
-    for time_entry_id in db['time_entries'].data.index:
-        entry = db['time_entries'].data.get_row(time_entry_id)
-        employee = db['employees'].data.get_row(entry['employee_id'])
+    for time_entry_id in db['time_entries'].index:
+        entry = db['time_entries'].get_row(time_entry_id)
+        employee = db['employees'].get_row(entry['employee_id'])
         team_id = employee['team_id']
 
         cost = entry['hours'] * employee['hourly_rate']
@@ -400,20 +400,20 @@ def test_multi_level_join_updates(tmp_path):
 
     # Update department budgets based on team costs
     for team_id, cost in team_costs.items():
-        team = db['teams'].data.get_row(team_id)
+        team = db['teams'].get_row(team_id)
         dept_id = team['department_id']
-        current_budget = db['departments'].data.get_row(dept_id)['budget']
+        current_budget = db['departments'].get_row(dept_id)['budget']
         # Deduct costs from budget
-        db['departments'].data.update_row(dept_id, {'budget': current_budget - cost})
+        db['departments'].update_row(dept_id, {'budget': current_budget - cost})
 
     db.push()
 
     # Verify cascading updates
     db.pull()
-    assert db['employees'].data.get_row(100)['hourly_rate'] == 50.0 * 1.1
-    assert db['employees'].data.get_row(101)['hourly_rate'] == 45.0 * 1.1
+    assert db['employees'].get_row(100)['hourly_rate'] == 50.0 * 1.1
+    assert db['employees'].get_row(101)['hourly_rate'] == 45.0 * 1.1
     # Budgets should be reduced
-    assert db['departments'].data.get_row(1)['budget'] < 1000000.0
+    assert db['departments'].get_row(1)['budget'] < 1000000.0
 
 
 def test_social_network_relationships(tmp_path):
@@ -440,7 +440,7 @@ def test_social_network_relationships(tmp_path):
     db.create_table('followers', followers, primary_key=['follower_id', 'followed_id'])
 
     # User 1 follows user 4
-    db['followers'].data.add_row({
+    db['followers'].add_row({
         'follower_id': 1,
         'followed_id': 4,
         'followed_at': str(pd.Timestamp.now())
@@ -452,24 +452,24 @@ def test_social_network_relationships(tmp_path):
         {'follower_id': 5, 'followed_id': 2, 'followed_at': str(pd.Timestamp.now())},
         {'follower_id': 5, 'followed_id': 3, 'followed_at': str(pd.Timestamp.now())}
     ]
-    db['followers'].data.bulk_insert(new_follows)
+    db['followers'].bulk_insert(new_follows)
 
     # Update follower/following counts
     # Count followers for each user
-    for user_id in db['users'].data.index:
+    for user_id in db['users'].index:
         # Count who follows this user
         follower_count = len(
-            db['followers'].data[
-                db['followers'].data.index.get_level_values('followed_id') == user_id
+            db['followers'][
+                db['followers'].index.get_level_values('followed_id') == user_id
             ]
         )
         # Count who this user follows
         following_count = len(
-            db['followers'].data[
-                db['followers'].data.index.get_level_values('follower_id') == user_id
+            db['followers'][
+                db['followers'].index.get_level_values('follower_id') == user_id
             ]
         )
-        db['users'].data.update_row(user_id, {
+        db['users'].update_row(user_id, {
             'follower_count': follower_count,
             'following_count': following_count
         })
@@ -478,9 +478,9 @@ def test_social_network_relationships(tmp_path):
 
     # Verify counts
     db.pull()
-    assert db['users'].data.get_row(1)['follower_count'] == 3  # Followed by 2, 3, 5
-    assert db['users'].data.get_row(1)['following_count'] == 3  # Follows 2, 3, 4
-    assert db['users'].data.get_row(5)['following_count'] == 3
+    assert db['users'].get_row(1)['follower_count'] == 3  # Followed by 2, 3, 5
+    assert db['users'].get_row(1)['following_count'] == 3  # Follows 2, 3, 4
+    assert db['users'].get_row(5)['following_count'] == 3
 
 
 def test_product_variant_hierarchy(tmp_path):
@@ -509,7 +509,7 @@ def test_product_variant_hierarchy(tmp_path):
     db.create_table('variants', variants, primary_key=['product_id', 'size', 'color'])
 
     # Add new variant
-    db['variants'].data.add_row({
+    db['variants'].add_row({
         'product_id': 1,
         'size': 'XL',
         'color': 'Red',
@@ -519,25 +519,25 @@ def test_product_variant_hierarchy(tmp_path):
     })
 
     # Update stock after sale
-    db['variants'].data.update_row((1, 'M', 'Red'), {'stock': 10})  # Sold 5
+    db['variants'].update_row((1, 'M', 'Red'), {'stock': 10})  # Sold 5
 
     # Discontinue variant
-    db['variants'].data.delete_row((2, '32', 'Blue'))
+    db['variants'].delete_row((2, '32', 'Blue'))
 
     # Price increase for all Large sizes
-    large_variants = db['variants'].data[
-        db['variants'].data.index.get_level_values('size') == 'L'
+    large_variants = db['variants'][
+        db['variants'].index.get_level_values('size') == 'L'
     ]
     for idx in large_variants.index:
-        current_adj = db['variants'].data.get_row(idx)['price_adjustment']
-        db['variants'].data.update_row(idx, {'price_adjustment': current_adj + 2.0})
+        current_adj = db['variants'].get_row(idx)['price_adjustment']
+        db['variants'].update_row(idx, {'price_adjustment': current_adj + 2.0})
 
     db.push()
 
     # Verify
     db.pull()
-    assert db['variants'].data.row_exists((1, 'XL', 'Red'))
-    assert db['variants'].data.get_row((1, 'M', 'Red'))['stock'] == 10
-    assert not db['variants'].data.row_exists((2, '32', 'Blue'))
-    assert db['variants'].data.get_row((1, 'L', 'Blue'))['price_adjustment'] == 4.0  # 2.0 + 2.0
+    assert db['variants'].row_exists((1, 'XL', 'Red'))
+    assert db['variants'].get_row((1, 'M', 'Red'))['stock'] == 10
+    assert not db['variants'].row_exists((2, '32', 'Blue'))
+    assert db['variants'].get_row((1, 'L', 'Blue'))['price_adjustment'] == 4.0  # 2.0 + 2.0
 

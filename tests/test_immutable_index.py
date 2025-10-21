@@ -3,7 +3,7 @@
 import pandas as pd
 import pytest
 
-from pandalchemy import TrackedDataFrame
+from pandalchemy import TableDataFrame
 from pandalchemy.exceptions import DataValidationError
 
 
@@ -35,7 +35,7 @@ def composite_pk_df():
 
 def test_index_setter_raises_error(sample_df):
     """Test that setting index directly raises DataValidationError."""
-    tdf = TrackedDataFrame(sample_df, 'id')
+    tdf = TableDataFrame(data=sample_df, primary_key='id')
 
     with pytest.raises(DataValidationError, match="Cannot modify index directly"):
         tdf.index = [10, 20, 30]
@@ -43,7 +43,7 @@ def test_index_setter_raises_error(sample_df):
 
 def test_index_setter_with_multiindex_raises_error(composite_pk_df):
     """Test that setting MultiIndex raises error."""
-    tdf = TrackedDataFrame(composite_pk_df, ['user_id', 'org_id'])
+    tdf = TableDataFrame(data=composite_pk_df, primary_key=['user_id', 'org_id'])
 
     new_index = pd.MultiIndex.from_tuples([('x', 'y')], names=['user_id', 'org_id'])
     with pytest.raises(DataValidationError, match="Cannot modify index directly"):
@@ -56,7 +56,7 @@ def test_index_setter_with_multiindex_raises_error(composite_pk_df):
 
 def test_update_row_cannot_update_single_pk(sample_df):
     """Test that update_row cannot update primary key column."""
-    tdf = TrackedDataFrame(sample_df, 'id')
+    tdf = TableDataFrame(data=sample_df, primary_key='id')
 
     # Trying to update PK should raise error
     with pytest.raises(DataValidationError, match="Cannot update primary key"):
@@ -65,7 +65,7 @@ def test_update_row_cannot_update_single_pk(sample_df):
 
 def test_update_row_can_update_non_pk_columns(sample_df):
     """Test that update_row CAN update non-PK columns."""
-    tdf = TrackedDataFrame(sample_df, 'id')
+    tdf = TableDataFrame(data=sample_df, primary_key='id')
 
     # Updating non-PK columns should work fine
     tdf.update_row(1, {'age': 26, 'name': 'Alicia'})
@@ -77,7 +77,7 @@ def test_update_row_can_update_non_pk_columns(sample_df):
 
 def test_update_row_cannot_update_composite_pk(composite_pk_df):
     """Test that update_row cannot update composite PK columns."""
-    tdf = TrackedDataFrame(composite_pk_df, ['user_id', 'org_id'])
+    tdf = TableDataFrame(data=composite_pk_df, primary_key=['user_id', 'org_id'])
 
     # Trying to update any part of composite PK should raise error
     with pytest.raises(DataValidationError, match="Cannot update primary key"):
@@ -89,7 +89,7 @@ def test_update_row_cannot_update_composite_pk(composite_pk_df):
 
 def test_update_row_composite_pk_non_pk_columns_ok(composite_pk_df):
     """Test that update_row CAN update non-PK columns with composite PK."""
-    tdf = TrackedDataFrame(composite_pk_df, ['user_id', 'org_id'])
+    tdf = TableDataFrame(data=composite_pk_df, primary_key=['user_id', 'org_id'])
 
     # Updating non-PK columns should work
     tdf.update_row(('u1', 'org1'), {'role': 'superadmin', 'active': False})
@@ -105,7 +105,7 @@ def test_update_row_composite_pk_non_pk_columns_ok(composite_pk_df):
 
 def test_delete_and_insert_to_change_pk(sample_df):
     """Test that deleting and inserting is the way to 'change' a PK."""
-    tdf = TrackedDataFrame(sample_df, 'id')
+    tdf = TableDataFrame(data=sample_df, primary_key='id')
 
     # Get original data
     original_row = tdf.get_row(1)
@@ -128,7 +128,7 @@ def test_delete_and_insert_to_change_pk(sample_df):
 
 def test_upsert_row_updates_non_pk(sample_df):
     """Test that upsert_row updates non-PK columns when row exists."""
-    tdf = TrackedDataFrame(sample_df, 'id')
+    tdf = TableDataFrame(data=sample_df, primary_key='id')
 
     # Upsert existing row (should update non-PK columns)
     tdf.upsert_row({'id': 2, 'name': 'Robert', 'age': 31})
@@ -140,7 +140,7 @@ def test_upsert_row_updates_non_pk(sample_df):
 
 def test_upsert_row_inserts_when_not_exists(sample_df):
     """Test that upsert_row inserts when row doesn't exist."""
-    tdf = TrackedDataFrame(sample_df, 'id')
+    tdf = TableDataFrame(data=sample_df, primary_key='id')
 
     # Upsert new row
     tdf.upsert_row({'id': 4, 'name': 'Dave', 'age': 40})
@@ -155,7 +155,7 @@ def test_upsert_row_inserts_when_not_exists(sample_df):
 
 def test_validate_data_allows_delete_and_insert(sample_df):
     """Test that validation allows normal delete/insert operations."""
-    tdf = TrackedDataFrame(sample_df, 'id')
+    tdf = TableDataFrame(data=sample_df, primary_key='id')
 
     # Delete a row
     tdf.delete_row(2)
@@ -179,6 +179,6 @@ def test_validate_data_allows_delete_and_insert(sample_df):
 def test_pk_immutability_documented_in_docstring():
     """Test that immutability is documented."""
     # Check that update_row docstring mentions immutability
-    assert "immutable" in TrackedDataFrame.update_row.__doc__.lower()
-    assert "cannot" in TrackedDataFrame.update_row.__doc__.lower()
+    assert "immutable" in TableDataFrame.update_row.__doc__.lower()
+    assert "cannot" in TableDataFrame.update_row.__doc__.lower()
 

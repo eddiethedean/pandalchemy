@@ -168,6 +168,131 @@ def ensure_dataframe_copy(df: pd.DataFrame) -> pd.DataFrame:
     return df.copy()
 
 
+def prepare_primary_key_for_table_creation(
+    df: pd.DataFrame,
+    primary_key: str | list[str]
+) -> pd.DataFrame:
+    """
+    Prepare DataFrame for table creation by handling primary key naming and validation.
+
+    This function allows using the DataFrame's index as the primary key by naming it
+    with the provided primary_key parameter. It validates against ambiguous situations.
+
+    Rules:
+    - If primary_key is NOT in columns:
+      - If index has a different name: raise ValueError (mismatch)
+      - If index is unnamed: name it with primary_key value
+      - Use the index as the primary key
+    - If primary_key exists as BOTH column AND index name: raise ValueError (ambiguity)
+    - If primary_key is only in columns: use existing behavior (no change needed)
+
+    Args:
+        df: DataFrame to process
+        primary_key: Name of the primary key (str) or list of names (list[str])
+
+    Returns:
+        DataFrame with properly named index (if using index as PK)
+
+    Raises:
+        ValueError: If there's a mismatch between index name and primary_key,
+                   or if primary_key exists in both columns and index (ambiguity)
+
+    Examples:
+        >>> # Index-based PK (unnamed index)
+        >>> df = pd.DataFrame({'name': ['Alice', 'Bob']})
+        >>> result = prepare_primary_key_for_table_creation(df, 'id')
+        >>> result.index.name  # 'id'
+
+        >>> # Column-based PK
+        >>> df = pd.DataFrame({'id': [1, 2], 'name': ['Alice', 'Bob']})
+        >>> result = prepare_primary_key_for_table_creation(df, 'id')
+        >>> 'id' in result.columns  # True
+    """
+    from pandalchemy.pk_utils import normalize_primary_key
+
+    df_copy = df.copy()
+    pk_cols = normalize_primary_key(primary_key)
+
+    # Handle single vs composite keys
+    if len(pk_cols) == 1:
+        pk_name = pk_cols[0]
+        pk_in_columns = pk_name in df_copy.columns
+
+        # Check index name
+        if isinstance(df_copy.index, pd.MultiIndex):
+            index_names = [n for n in df_copy.index.names if n is not None]
+            pk_in_index = pk_name in index_names
+        else:
+            pk_in_index = df_copy.index.name == pk_name
+
+        # Validation: Check for ambiguity
+        if pk_in_columns and pk_in_index:
+            raise ValueError(
+                f"Ambiguous primary key '{pk_name}': exists as both a column and index name. "
+                f"Please remove one or rename to avoid ambiguity."
+            )
+
+        # If PK is not in columns, handle index naming
+        if not pk_in_columns:
+            # Check if index has a different name
+            if df_copy.index.name is not None and df_copy.index.name != pk_name:
+                raise ValueError(
+                    f"Primary key mismatch: index is named '{df_copy.index.name}' "
+                    f"but primary_key parameter is '{pk_name}'. "
+                    f"Either rename the index or use index name as primary_key parameter."
+                )
+            # Name the index with the primary_key value
+            df_copy.index.name = pk_name
+    else:
+        # Composite key
+        pk_in_columns = all(pk in df_copy.columns for pk in pk_cols)
+
+        # Check MultiIndex names
+        if isinstance(df_copy.index, pd.MultiIndex):
+            index_names = [n for n in df_copy.index.names if n is not None]
+            pk_in_index = all(pk in index_names for pk in pk_cols)
+
+            # Check for ambiguity
+            if pk_in_columns and pk_in_index:
+                raise ValueError(
+                    f"Ambiguous composite primary key {pk_cols}: exists as both columns and index names. "
+                    f"Please remove one or rename to avoid ambiguity."
+                )
+
+            # If PK is not in columns, validate index names
+            if not pk_in_columns:
+                # Check if any index names differ
+                current_names = list(df_copy.index.names)
+                if len(current_names) != len(pk_cols):
+                    if any(n is not None for n in current_names):
+                        raise ValueError(
+                            f"Primary key mismatch: MultiIndex has {len(current_names)} levels "
+                            f"but primary_key specifies {len(pk_cols)} columns: {pk_cols}"
+                        )
+                    # Unnamed MultiIndex - name it
+                    df_copy.index.names = pk_cols  # type: ignore[assignment]
+                else:
+                    # Check each name
+                    for i, (current, expected) in enumerate(zip(current_names, pk_cols)):
+                        if current is not None and current != expected:
+                            raise ValueError(
+                                f"Primary key mismatch: MultiIndex level {i} is named '{current}' "
+                                f"but primary_key parameter specifies '{expected}'. "
+                                f"Either rename the index or use index names as primary_key parameter."
+                            )
+                    # Set names (handles partially named indexes)
+                    df_copy.index.names = pk_cols  # type: ignore[assignment]
+        else:
+            # Single index but composite key requested - not in index
+            if not pk_in_columns:
+                raise ValueError(
+                    f"Composite primary key {pk_cols} not found in DataFrame columns. "
+                    f"For composite keys, all columns must exist in the DataFrame."
+                )
+
+    return df_copy
+
+
 def extract_primary_key_column(
     df: pd.DataFrame,
     primary_key: str | list[str]
@@ -184,21 +309,16 @@ def extract_primary_key_column(
     Returns:
         DataFrame with primary key as column(s)
     """
+    from pandalchemy.pk_utils import locate_primary_key
+
     df_copy = df.copy()
 
-    # Handle single column primary key
-    if isinstance(primary_key, str):
-        if df_copy.index.name == primary_key:
-            df_copy = df_copy.reset_index()
-    else:
-        # Handle composite primary key (MultiIndex)
-        pk_cols = list(primary_key)
-        if isinstance(df_copy.index, pd.MultiIndex):
-            # Check if index names match PK columns
-            if all(name in pk_cols for name in df_copy.index.names):
-                df_copy = df_copy.reset_index()
-        elif df_copy.index.name in pk_cols:
-            df_copy = df_copy.reset_index()
+    # Check if PK is in index
+    _, in_index = locate_primary_key(df_copy, primary_key)
+
+    # If PK is in index, reset it to columns
+    if in_index:
+        df_copy = df_copy.reset_index()
 
     return df_copy
 

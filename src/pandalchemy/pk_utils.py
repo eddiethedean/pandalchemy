@@ -31,10 +31,7 @@ def normalize_primary_key(primary_key: str | list[str]) -> list[str]:
     return [primary_key] if isinstance(primary_key, str) else list(primary_key)
 
 
-def locate_primary_key(
-    df: pd.DataFrame,
-    primary_key: str | list[str]
-) -> tuple[bool, bool]:
+def locate_primary_key(df: pd.DataFrame, primary_key: str | list[str]) -> tuple[bool, bool]:
     """
     Determine if primary key is in columns vs index.
 
@@ -71,10 +68,7 @@ def locate_primary_key(
     return in_columns, in_index
 
 
-def extract_pk_values(
-    df: pd.DataFrame,
-    primary_key: str | list[str]
-) -> set[Any]:
+def extract_pk_values(df: pd.DataFrame, primary_key: str | list[str]) -> set[Any]:
     """
     Extract all primary key values from DataFrame.
 
@@ -112,18 +106,16 @@ def extract_pk_values(
         if all(col in df.columns for col in pk_cols):
             # PK columns are in DataFrame columns
             return {tuple(row) for row in df[pk_cols].values}
-        elif isinstance(df.index, pd.MultiIndex) and \
-             all(name in df.index.names for name in pk_cols):
+        elif isinstance(df.index, pd.MultiIndex) and all(
+            name in df.index.names for name in pk_cols
+        ):
             # PK is in MultiIndex
             return set(df.index.values)
         else:
             return set()
 
 
-def set_pk_as_index(
-    df: pd.DataFrame,
-    pk_cols: list[str]
-) -> pd.DataFrame:
+def set_pk_as_index(df: pd.DataFrame, pk_cols: list[str]) -> pd.DataFrame:
     """
     Set primary key column(s) as DataFrame index.
 
@@ -161,4 +153,3 @@ def set_pk_as_index(
     else:
         # Creates MultiIndex
         return df.set_index(pk_cols)
-

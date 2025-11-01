@@ -23,20 +23,19 @@ __version__ = version
 
 __all__ = [
     # Core classes
-    'DataBase',
-    'TableDataFrame',
-    'ChangeTracker',
-    'ChangeType',
-    'ExecutionPlan',
+    "DataBase",
+    "TableDataFrame",
+    "ChangeTracker",
+    "ChangeType",
+    "ExecutionPlan",
     # Modules
-    'sql_ops',
+    "sql_ops",
     # Exceptions
-    'PandalchemyError',
-    'SchemaError',
-    'TransactionError',
-    'DataValidationError',
-    'ChangeTrackingError',
+    "PandalchemyError",
+    "SchemaError",
+    "TransactionError",
+    "DataValidationError",
+    "ChangeTrackingError",
     # Version
-    '__version__',
+    "__version__",
 ]
-

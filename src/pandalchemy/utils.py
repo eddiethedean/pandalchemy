@@ -19,8 +19,10 @@ def convert_numpy_types(value: Any) -> Any:
     This is necessary because some database operations don't handle numpy
     types correctly (e.g., numpy.int64 in SQL WHERE clauses).
 
+    Also converts pandas Timestamp objects to strings for SQLite compatibility.
+
     Args:
-        value: Value that may be a numpy type
+        value: Value that may be a numpy type or pandas Timestamp
 
     Returns:
         Python native type equivalent
@@ -32,7 +34,11 @@ def convert_numpy_types(value: Any) -> Any:
         >>> convert_numpy_types("hello")
         'hello'
     """
-    if hasattr(value, 'item'):
+    # Handle pandas Timestamp objects (for SQLite compatibility)
+    if isinstance(value, pd.Timestamp):
+        return value.isoformat()
+
+    if hasattr(value, "item"):
         # numpy scalar types have an item() method
         return value.item()
     return value
@@ -95,15 +101,15 @@ def pandas_dtype_to_python_type(dtype: Any) -> type:
 
     dtype_str = str(dtype).lower()
 
-    if 'int' in dtype_str:
+    if "int" in dtype_str:
         return int
-    elif 'float' in dtype_str:
+    elif "float" in dtype_str:
         return float
-    elif 'bool' in dtype_str:
+    elif "bool" in dtype_str:
         return bool
-    elif 'datetime' in dtype_str:
+    elif "datetime" in dtype_str:
         return str  # datetime stored as string
-    elif 'object' in dtype_str:
+    elif "object" in dtype_str:
         return str
     else:
         return str
@@ -169,8 +175,7 @@ def ensure_dataframe_copy(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def prepare_primary_key_for_table_creation(
-    df: pd.DataFrame,
-    primary_key: str | list[str]
+    df: pd.DataFrame, primary_key: str | list[str]
 ) -> pd.DataFrame:
     """
     Prepare DataFrame for table creation by handling primary key naming and validation.
@@ -293,10 +298,7 @@ def prepare_primary_key_for_table_creation(
     return df_copy
 
 
-def extract_primary_key_column(
-    df: pd.DataFrame,
-    primary_key: str | list[str]
-) -> pd.DataFrame:
+def extract_primary_key_column(df: pd.DataFrame, primary_key: str | list[str]) -> pd.DataFrame:
     """
     Ensure primary key is a column (not index) in the DataFrame.
 
@@ -336,12 +338,7 @@ def validate_dataframe_for_sql(df: pd.DataFrame) -> None:
     from pandalchemy.exceptions import DataValidationError
 
     if not df.index.is_unique:
-        raise DataValidationError(
-            "DataFrame index must have unique values for SQL operations"
-        )
+        raise DataValidationError("DataFrame index must have unique values for SQL operations")
 
     if not df.columns.is_unique:
-        raise DataValidationError(
-            "DataFrame columns must have unique names for SQL operations"
-        )
-
+        raise DataValidationError("DataFrame columns must have unique names for SQL operations")

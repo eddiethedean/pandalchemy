@@ -16,6 +16,7 @@ import pandas as pd
 
 class ChangeType(Enum):
     """Types of changes that can be tracked."""
+
     INSERT = "insert"
     UPDATE = "update"
     DELETE = "delete"
@@ -27,6 +28,7 @@ class ChangeType(Enum):
 @dataclass
 class Operation:
     """Represents a single operation performed on the DataFrame."""
+
     operation_type: str
     method_name: str
     args: tuple[Any, ...] = field(default_factory=tuple)
@@ -37,6 +39,7 @@ class Operation:
 @dataclass
 class RowChange:
     """Represents a change to a specific row."""
+
     change_type: ChangeType
     primary_key_value: Any
     old_data: dict[str, Any] | None = None
@@ -100,6 +103,7 @@ class ChangeTracker:
             Set of primary key values (tuples for composite keys)
         """
         from pandalchemy.pk_utils import extract_pk_values
+
         return extract_pk_values(data, self.primary_key)
 
     def record_operation(self, method_name: str, *args, **kwargs) -> None:
@@ -112,10 +116,7 @@ class ChangeTracker:
             **kwargs: Keyword arguments passed to the method
         """
         operation = Operation(
-            operation_type="method_call",
-            method_name=method_name,
-            args=args,
-            kwargs=kwargs
+            operation_type="method_call", method_name=method_name, args=args, kwargs=kwargs
         )
         self.operations.append(operation)
 
@@ -206,8 +207,9 @@ class ChangeTracker:
                 # PK in columns
                 current_keys = {tuple(row) for row in current_data[pk_cols].values}
                 current_df = current_data.set_index(pk_cols)
-            elif isinstance(current_data.index, pd.MultiIndex) and \
-                 all(name in current_data.index.names for name in pk_cols):
+            elif isinstance(current_data.index, pd.MultiIndex) and all(
+                name in current_data.index.names for name in pk_cols
+            ):
                 # PK in MultiIndex
                 current_keys = set(current_data.index.values)
                 current_df = current_data
@@ -220,8 +222,9 @@ class ChangeTracker:
                 # PK in columns
                 original_df = self.original_data.set_index(pk_cols)
                 original_keys = {tuple(row) for row in self.original_data[pk_cols].values}
-            elif isinstance(self.original_data.index, pd.MultiIndex) and \
-                 all(name in self.original_data.index.names for name in pk_cols):
+            elif isinstance(self.original_data.index, pd.MultiIndex) and all(
+                name in self.original_data.index.names for name in pk_cols
+            ):
                 # PK in MultiIndex
                 original_df = self.original_data
                 original_keys = set(self.original_data.index.values)
@@ -233,9 +236,7 @@ class ChangeTracker:
         for key in inserted_keys:
             row_data = current_df.loc[key].to_dict()
             self.row_changes[key] = RowChange(
-                change_type=ChangeType.INSERT,
-                primary_key_value=key,
-                new_data=row_data
+                change_type=ChangeType.INSERT, primary_key_value=key, new_data=row_data
             )
 
         # Find deletes: keys in original but not in current
@@ -243,9 +244,7 @@ class ChangeTracker:
         for key in deleted_keys:
             row_data = original_df.loc[key].to_dict()
             self.row_changes[key] = RowChange(
-                change_type=ChangeType.DELETE,
-                primary_key_value=key,
-                old_data=row_data
+                change_type=ChangeType.DELETE, primary_key_value=key, old_data=row_data
             )
 
         # Find updates: keys in both, but with different values
@@ -281,7 +280,7 @@ class ChangeTracker:
                             change_type=ChangeType.UPDATE,
                             primary_key_value=key,
                             old_data=original_row.to_dict(),  # type: ignore[arg-type]
-                            new_data=current_row.to_dict()  # type: ignore[arg-type]
+                            new_data=current_row.to_dict(),  # type: ignore[arg-type]
                         )
             except (ValueError, TypeError):
                 # If comparison fails, assume they're different
@@ -289,23 +288,20 @@ class ChangeTracker:
                     change_type=ChangeType.UPDATE,
                     primary_key_value=key,
                     old_data=original_row.to_dict(),  # type: ignore[arg-type]
-                    new_data=current_row.to_dict()  # type: ignore[arg-type]
+                    new_data=current_row.to_dict(),  # type: ignore[arg-type]
                 )
 
     def get_inserts(self) -> list[RowChange]:
         """Get all row insertions."""
-        return [rc for rc in self.row_changes.values()
-                if rc.change_type == ChangeType.INSERT]
+        return [rc for rc in self.row_changes.values() if rc.change_type == ChangeType.INSERT]
 
     def get_updates(self) -> list[RowChange]:
         """Get all row updates."""
-        return [rc for rc in self.row_changes.values()
-                if rc.change_type == ChangeType.UPDATE]
+        return [rc for rc in self.row_changes.values() if rc.change_type == ChangeType.UPDATE]
 
     def get_deletes(self) -> list[RowChange]:
         """Get all row deletions."""
-        return [rc for rc in self.row_changes.values()
-                if rc.change_type == ChangeType.DELETE]
+        return [rc for rc in self.row_changes.values() if rc.change_type == ChangeType.DELETE]
 
     def has_changes(self) -> bool:
         """
@@ -315,11 +311,11 @@ class ChangeTracker:
             True if there are any changes, False otherwise
         """
         return (
-            len(self.row_changes) > 0 or
-            len(self.added_columns) > 0 or
-            len(self.dropped_columns) > 0 or
-            len(self.renamed_columns) > 0 or
-            len(self.altered_column_types) > 0
+            len(self.row_changes) > 0
+            or len(self.added_columns) > 0
+            or len(self.dropped_columns) > 0
+            or len(self.renamed_columns) > 0
+            or len(self.altered_column_types) > 0
         )
 
     def reset(self, new_data: pd.DataFrame) -> None:
@@ -357,6 +353,5 @@ class ChangeTracker:
             "columns_dropped": len(self.dropped_columns),
             "columns_renamed": len(self.renamed_columns),
             "columns_type_changed": len(self.altered_column_types),
-            "has_changes": self.has_changes()
+            "has_changes": self.has_changes(),
         }
-

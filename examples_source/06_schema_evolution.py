@@ -1,8 +1,8 @@
 # %% [markdown]
 # # 06_schema_evolution
-# 
+#
 # Schema Evolution
-# 
+#
 # This example demonstrates schema modification capabilities:
 # - Adding columns with defaults
 # - Dropping columns safely
@@ -13,11 +13,12 @@
 # %%
 import pandas as pd
 from sqlalchemy import create_engine
+
 import pandalchemy as pa
 
 # %%
 # Setup
-engine = create_engine('sqlite:///:memory:')
+engine = create_engine("sqlite:///:memory:")
 db = pa.DataBase(engine)
 
 # %%
@@ -25,12 +26,15 @@ print("Schema Evolution Example")
 
 # %%
 # Create initial table
-users_data = pd.DataFrame({
-    'username': ['alice', 'bob', 'charlie'],
-    'email': ['alice@example.com', 'bob@example.com', 'charlie@example.com']
-}, index=[1, 2, 3])
+users_data = pd.DataFrame(
+    {
+        "username": ["alice", "bob", "charlie"],
+        "email": ["alice@example.com", "bob@example.com", "charlie@example.com"],
+    },
+    index=[1, 2, 3],
+)
 
-users = db.create_table('users', users_data, primary_key='id')
+users = db.create_table("users", users_data, primary_key="id")
 
 # %% [markdown]
 # ### 1. Initial Schema
@@ -50,7 +54,7 @@ print(f"Dtypes:\n{users._data.dtypes}")
 # ### \n   a) Add 'active' column with default True:
 
 # %%
-users.add_column_with_default('active', True)
+users.add_column_with_default("active", True)
 users.push()
 
 print("      ✓ Column added")
@@ -63,8 +67,8 @@ print(users.to_pandas())
 
 # %%
 users.pull()  # Refresh first
-users.add_column_with_default('verified', False)
-users.add_column_with_default('signup_date', '2024-01-01')
+users.add_column_with_default("verified", False)
+users.add_column_with_default("signup_date", "2024-01-01")
 users.push()
 
 print("      ✓ Added 'verified' and 'signup_date'")
@@ -77,7 +81,7 @@ print(users.to_pandas())
 # ### \n   c) Add nullable column:
 
 # %%
-users.add_column_with_default('phone', None)
+users.add_column_with_default("phone", None)
 users.push()
 
 print("      ✓ Added 'phone' (nullable)")
@@ -94,7 +98,7 @@ print(users.to_pandas())
 # ### \n   a) Rename 'username' to 'name':
 
 # %%
-users.rename_column_safe('username', 'name')
+users.rename_column_safe("username", "name")
 users.push()
 
 print("      ✓ Column renamed")
@@ -107,7 +111,7 @@ print(users.to_pandas())
 # ### \n   b) Rename 'signup_date' to 'created_at':
 
 # %%
-users.rename_column_safe('signup_date', 'created_at')
+users.rename_column_safe("signup_date", "created_at")
 users.push()
 users.pull()
 
@@ -124,7 +128,7 @@ print(f"      Columns: {list(users._data.columns)}")
 # ### \n   a) Drop 'phone' column:
 
 # %%
-users.drop_column_safe('phone')
+users.drop_column_safe("phone")
 users.push()
 
 print("      ✓ Column dropped")
@@ -137,10 +141,10 @@ print(users.to_pandas())
 # ### \n   b) Clean up boolean flags:
 
 # %%
-users.drop_column_safe('active')
+users.drop_column_safe("active")
 users.push()
 users.pull()
-users.drop_column_safe('verified')
+users.drop_column_safe("verified")
 users.push()
 
 print("      ✓ Dropped 'active' and 'verified'")
@@ -152,13 +156,16 @@ print(users.to_pandas())
 
 # %%
 # Create table with type change needs
-orders_data = pd.DataFrame({
-    'order_number': ['1001', '1002', '1003'],  # String but should be int
-    'amount': [99.99, 149.50, 299.99],
-    'quantity': [1.0, 2.0, 1.0]  # Float but should be int
-}, index=[1, 2, 3])
+orders_data = pd.DataFrame(
+    {
+        "order_number": ["1001", "1002", "1003"],  # String but should be int
+        "amount": [99.99, 149.50, 299.99],
+        "quantity": [1.0, 2.0, 1.0],  # Float but should be int
+    },
+    index=[1, 2, 3],
+)
 
-orders = db.create_table('orders', orders_data, primary_key='id')
+orders = db.create_table("orders", orders_data, primary_key="id")
 
 print("\n   Initial types:")
 print(orders._data.dtypes)
@@ -169,7 +176,7 @@ print(orders._data.dtypes)
 # ### \n   a) Convert order_number to integer:
 
 # %%
-orders.change_column_type('order_number', int)
+orders.change_column_type("order_number", int)
 orders.push()
 orders.pull()
 
@@ -182,7 +189,7 @@ print(f"      New type: {orders._data['order_number'].dtype}")
 # ### \n   b) Convert quantity to integer:
 
 # %%
-orders.change_column_type('quantity', int)
+orders.change_column_type("quantity", int)
 orders.push()
 orders.pull()
 
@@ -202,22 +209,22 @@ print(users.to_pandas())
 
 # Step 1: Add new fields
 print("\n   Step 1: Add user profile fields")
-users.add_column_with_default('first_name', '')
-users.add_column_with_default('last_name', '')
-users.add_column_with_default('age', 0)
+users.add_column_with_default("first_name", "")
+users.add_column_with_default("last_name", "")
+users.add_column_with_default("age", 0)
 users.push()
 users.pull()
 
 # Step 2: Populate from existing data
 print("\n   Step 2: Populate from 'name' column")
 for idx in users._data.index:
-    name = users.get_row(idx)['name']
+    name = users.get_row(idx)["name"]
     # Simple split (in real code, handle edge cases)
     parts = name.split()
     if len(parts) >= 1:
-        users.update_row(idx, {'first_name': parts[0].capitalize()})
+        users.update_row(idx, {"first_name": parts[0].capitalize()})
     if len(parts) >= 2:
-        users.update_row(idx, {'last_name': parts[-1].capitalize()})
+        users.update_row(idx, {"last_name": parts[-1].capitalize()})
 
 users.push()
 users.pull()
@@ -225,7 +232,7 @@ print(users.to_pandas())
 
 # Step 3: Drop old column
 print("\n   Step 3: Drop old 'name' column")
-users.drop_column_safe('name')
+users.drop_column_safe("name")
 users.push()
 users.pull()
 
@@ -259,7 +266,7 @@ print("      users.push()")
 
 # %%
 try:
-    users.rename_column_safe('nonexistent', 'newname')
+    users.rename_column_safe("nonexistent", "newname")
     users.push()
     print("      ❌ Should have failed")
 except Exception as e:
@@ -272,7 +279,7 @@ except Exception as e:
 
 # %%
 try:
-    users.drop_column_safe('nonexistent')
+    users.drop_column_safe("nonexistent")
     users.push()
     print("      ❌ Should have failed")
 except Exception as e:
@@ -301,16 +308,13 @@ print("      → Push and verify")
 
 # %%
 # Schema changes appear in change summary
-products_data = pd.DataFrame({
-    'name': ['Widget', 'Gadget'],
-    'price': [9.99, 19.99]
-}, index=[1, 2])
+products_data = pd.DataFrame({"name": ["Widget", "Gadget"], "price": [9.99, 19.99]}, index=[1, 2])
 
-products = db.create_table('products', products_data, primary_key='id')
+products = db.create_table("products", products_data, primary_key="id")
 
 # Make schema changes
-products.add_column_with_default('stock', 0)
-products.rename_column_safe('price', 'unit_price')
+products.add_column_with_default("stock", 0)
+products.rename_column_safe("price", "unit_price")
 
 # Check change summary
 summary = products.get_changes_summary()

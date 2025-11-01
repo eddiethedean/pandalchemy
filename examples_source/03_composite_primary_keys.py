@@ -10,13 +10,14 @@
 # %%
 import pandas as pd
 from sqlalchemy import create_engine
+
 import pandalchemy as pa
 
 # %% [markdown]
 # ## Setup
 
 # %%
-engine = create_engine('sqlite:///:memory:')
+engine = create_engine("sqlite:///:memory:")
 db = pa.DataBase(engine)
 
 # %% [markdown]
@@ -24,20 +25,21 @@ db = pa.DataBase(engine)
 # A many-to-many relationship table (users ↔ organizations)
 
 # %%
-memberships_data = pd.DataFrame({
-    'user_id': [1, 1, 2, 2, 3],
-    'org_id': ['org1', 'org2', 'org1', 'org3', 'org1'],
-    'role': ['admin', 'member', 'member', 'admin', 'member'],
-    'joined_date': ['2024-01-01', '2024-02-15', '2024-01-10', '2024-03-01', '2024-01-05']
-})
+memberships_data = pd.DataFrame(
+    {
+        "user_id": [1, 1, 2, 2, 3],
+        "org_id": ["org1", "org2", "org1", "org3", "org1"],
+        "role": ["admin", "member", "member", "admin", "member"],
+        "joined_date": ["2024-01-01", "2024-02-15", "2024-01-10", "2024-03-01", "2024-01-05"],
+    }
+)
 
 print("Original DataFrame:")
-memberships_data
+memberships_data  # noqa: B018
 
 # %%
 # Create table with composite PK
-memberships = db.create_table('memberships', memberships_data, 
-                               primary_key=['user_id', 'org_id'])
+memberships = db.create_table("memberships", memberships_data, primary_key=["user_id", "org_id"])
 
 print("✓ Table created with composite primary key")
 print(f"Index names: {memberships._data.index.names}")
@@ -54,13 +56,13 @@ memberships.to_pandas()
 
 # %%
 # Get row by composite key (tuple)
-membership = memberships.get_row((1, 'org1'))
+membership = memberships.get_row((1, "org1"))
 print(f"User 1 in org1: {membership}")
 
 # %%
 # Check if membership exists
-exists = memberships.row_exists((2, 'org1'))
-not_exists = memberships.row_exists((999, 'org999'))
+exists = memberships.row_exists((2, "org1"))
+not_exists = memberships.row_exists((999, "org999"))
 print(f"(2, 'org1') exists: {exists}")
 print(f"(999, 'org999') exists: {not_exists}")
 
@@ -68,26 +70,21 @@ print(f"(999, 'org999') exists: {not_exists}")
 # ### Create with composite key
 
 # %%
-memberships.add_row({
-    'user_id': 3,
-    'org_id': 'org2',
-    'role': 'member',
-    'joined_date': '2024-04-01'
-})
+memberships.add_row({"user_id": 3, "org_id": "org2", "role": "member", "joined_date": "2024-04-01"})
 print("✓ Added user 3 to org2")
 
 # %% [markdown]
 # ### Update with composite key
 
 # %%
-memberships.update_row((1, 'org2'), {'role': 'admin'})
+memberships.update_row((1, "org2"), {"role": "admin"})
 print("✓ Promoted user 1 in org2 to admin")
 
 # %% [markdown]
 # ### Delete with composite key
 
 # %%
-memberships.delete_row((2, 'org3'))
+memberships.delete_row((2, "org3"))
 print("✓ Removed user 2 from org3")
 
 memberships.push()
@@ -102,37 +99,40 @@ memberships.to_pandas()
 # %%
 user_1_orgs = memberships._data.loc[1]
 print("All orgs for user 1:")
-user_1_orgs
+user_1_orgs  # noqa: B018
 
 # %% [markdown]
 # ### Get all users in an organization
 
 # %%
-org1_users = memberships._data.xs('org1', level='org_id')
+org1_users = memberships._data.xs("org1", level="org_id")
 print("All users in org1:")
-org1_users
+org1_users  # noqa: B018
 
 # %% [markdown]
 # ### Filter by role
 
 # %%
-admins = memberships._data[memberships._data['role'] == 'admin']
+admins = memberships._data[memberships._data["role"] == "admin"]
 print("All admin memberships:")
-admins
+admins  # noqa: B018
 
 # %% [markdown]
 # ## Real-World Example: Student Enrollments
 
 # %%
-enrollments_data = pd.DataFrame({
-    'student_id': [101, 101, 102, 102, 103, 103],
-    'course_id': ['CS101', 'MATH200', 'CS101', 'ENG150', 'MATH200', 'CS101'],
-    'grade': ['A', 'B+', 'A-', 'B', 'A', 'A'],
-    'semester': ['Fall2024', 'Fall2024', 'Fall2024', 'Fall2024', 'Fall2024', 'Fall2024']
-})
+enrollments_data = pd.DataFrame(
+    {
+        "student_id": [101, 101, 102, 102, 103, 103],
+        "course_id": ["CS101", "MATH200", "CS101", "ENG150", "MATH200", "CS101"],
+        "grade": ["A", "B+", "A-", "B", "A", "A"],
+        "semester": ["Fall2024", "Fall2024", "Fall2024", "Fall2024", "Fall2024", "Fall2024"],
+    }
+)
 
-enrollments = db.create_table('enrollments', enrollments_data,
-                               primary_key=['student_id', 'course_id'])
+enrollments = db.create_table(
+    "enrollments", enrollments_data, primary_key=["student_id", "course_id"]
+)
 
 print("✓ Created enrollments table:")
 enrollments.to_pandas()
@@ -143,21 +143,21 @@ enrollments.to_pandas()
 # %%
 transcript = enrollments._data.loc[101]
 print("Student 101 transcript:")
-transcript[['grade', 'semester']]
+transcript[["grade", "semester"]]
 
 # %% [markdown]
 # ### Course roster (all students in a course)
 
 # %%
-roster = enrollments._data.xs('CS101', level='course_id')
+roster = enrollments._data.xs("CS101", level="course_id")
 print("CS101 roster:")
-roster[['grade', 'semester']]
+roster[["grade", "semester"]]
 
 # %% [markdown]
 # ### Update a grade
 
 # %%
-enrollments.update_row((102, 'CS101'), {'grade': 'A'})
+enrollments.update_row((102, "CS101"), {"grade": "A"})
 enrollments.push()
 print("✓ Grade updated to A")
 
@@ -168,34 +168,39 @@ enrollments.to_pandas()
 # Time-series data with server, metric, and timestamp
 
 # %%
-metrics_data = pd.DataFrame({
-    'server_id': ['srv1', 'srv1', 'srv2', 'srv2', 'srv1', 'srv2'],
-    'metric_name': ['cpu', 'memory', 'cpu', 'memory', 'cpu', 'memory'],
-    'timestamp': ['2024-01-01 10:00', '2024-01-01 10:00', 
-                  '2024-01-01 10:00', '2024-01-01 10:00',
-                  '2024-01-01 10:05', '2024-01-01 10:05'],
-    'value': [45.2, 62.1, 78.3, 45.8, 48.1, 67.2]
-})
+metrics_data = pd.DataFrame(
+    {
+        "server_id": ["srv1", "srv1", "srv2", "srv2", "srv1", "srv2"],
+        "metric_name": ["cpu", "memory", "cpu", "memory", "cpu", "memory"],
+        "timestamp": [
+            "2024-01-01 10:00",
+            "2024-01-01 10:00",
+            "2024-01-01 10:00",
+            "2024-01-01 10:00",
+            "2024-01-01 10:05",
+            "2024-01-01 10:05",
+        ],
+        "value": [45.2, 62.1, 78.3, 45.8, 48.1, 67.2],
+    }
+)
 
-metrics = db.create_table('metrics', metrics_data,
-                           primary_key=['server_id', 'metric_name', 'timestamp'])
+metrics = db.create_table(
+    "metrics", metrics_data, primary_key=["server_id", "metric_name", "timestamp"]
+)
 
 print("✓ Created metrics table with 3-column PK:")
 metrics.to_pandas()
 
 # %%
 # Access with 3-tuple
-cpu_metric = metrics.get_row(('srv1', 'cpu', '2024-01-01 10:00'))
+cpu_metric = metrics.get_row(("srv1", "cpu", "2024-01-01 10:00"))
 print(f"srv1 CPU at 10:00: {cpu_metric['value']}")
 
 # %%
 # Add new metric
-metrics.add_row({
-    'server_id': 'srv1',
-    'metric_name': 'disk',
-    'timestamp': '2024-01-01 10:00',
-    'value': 82.5
-})
+metrics.add_row(
+    {"server_id": "srv1", "metric_name": "disk", "timestamp": "2024-01-01 10:00", "value": 82.5}
+)
 metrics.push()
 
 metrics.to_pandas()
@@ -205,9 +210,9 @@ metrics.to_pandas()
 
 # %%
 new_memberships = [
-    {'user_id': 4, 'org_id': 'org1', 'role': 'member', 'joined_date': '2024-05-01'},
-    {'user_id': 4, 'org_id': 'org2', 'role': 'admin', 'joined_date': '2024-05-15'},
-    {'user_id': 5, 'org_id': 'org1', 'role': 'member', 'joined_date': '2024-06-01'},
+    {"user_id": 4, "org_id": "org1", "role": "member", "joined_date": "2024-05-01"},
+    {"user_id": 4, "org_id": "org2", "role": "admin", "joined_date": "2024-05-15"},
+    {"user_id": 5, "org_id": "org1", "role": "member", "joined_date": "2024-06-01"},
 ]
 
 for membership in new_memberships:
@@ -225,18 +230,16 @@ memberships.to_pandas()
 # %%
 # Update all members in org1 to contributors
 memberships.update_where(
-    (memberships._data.index.get_level_values('org_id') == 'org1') & 
-    (memberships._data['role'] == 'member'),
-    {'role': 'contributor'}
+    (memberships._data.index.get_level_values("org_id") == "org1")
+    & (memberships._data["role"] == "member"),
+    {"role": "contributor"},
 )
 
 print("✓ Promoted all members in org1 to contributors")
 
 # %%
 # Delete old memberships
-old_count = memberships.delete_where(
-    memberships._data['joined_date'] < '2024-02-01'
-)
+old_count = memberships.delete_where(memberships._data["joined_date"] < "2024-02-01")
 print(f"✓ Deleted {old_count} old memberships")
 
 memberships.push()
@@ -253,4 +256,3 @@ memberships.to_pandas()
 # - Perfect for many-to-many relationships
 # - All CRUD operations work with tuple keys
 # - Conditional operations work with composite keys
-

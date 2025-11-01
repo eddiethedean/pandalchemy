@@ -1,8 +1,8 @@
 # %% [markdown]
 # # 09_immutable_primary_keys
-# 
+#
 # Immutable Primary Keys
-# 
+#
 # This example demonstrates primary key immutability:
 # - Why primary keys can't be modified
 # - How to handle PK changes
@@ -12,12 +12,13 @@
 # %%
 import pandas as pd
 from sqlalchemy import create_engine
+
 import pandalchemy as pa
 from pandalchemy.exceptions import DataValidationError
 
 # %%
 # Setup
-engine = create_engine('sqlite:///:memory:')
+engine = create_engine("sqlite:///:memory:")
 db = pa.DataBase(engine)
 
 # %%
@@ -25,13 +26,16 @@ print("Immutable Primary Keys Example")
 
 # %%
 # Create sample data
-users_data = pd.DataFrame({
-    'username': ['alice', 'bob', 'charlie'],
-    'email': ['alice@example.com', 'bob@example.com', 'charlie@example.com'],
-    'status': ['active', 'active', 'inactive']
-}, index=[1, 2, 3])
+users_data = pd.DataFrame(
+    {
+        "username": ["alice", "bob", "charlie"],
+        "email": ["alice@example.com", "bob@example.com", "charlie@example.com"],
+        "status": ["active", "active", "inactive"],
+    },
+    index=[1, 2, 3],
+)
 
-users = db.create_table('users', users_data, primary_key='id')
+users = db.create_table("users", users_data, primary_key="id")
 
 # %% [markdown]
 # ### 1. Primary Key as Index
@@ -65,7 +69,7 @@ print("   • Pandas index provides natural immutability")
 
 # %%
 try:
-    users.update_row(1, {'id': 999})
+    users.update_row(1, {"id": 999})
     print("      ❌ Should have raised error")
 except DataValidationError as e:
     print(f"      ✓ Prevented: {str(e)[:60]}...")
@@ -77,10 +81,10 @@ except DataValidationError as e:
 
 # %%
 try:
-    users.update_row(2, {'username': 'robert', 'id': 888})
+    users.update_row(2, {"username": "robert", "id": 888})
     print("      ❌ Should have raised error")
-except DataValidationError as e:
-    print(f"      ✓ Prevented: PK cannot be updated")
+except DataValidationError:
+    print("      ✓ Prevented: PK cannot be updated")
 
 # Try to modify index directly
 
@@ -98,7 +102,7 @@ finally:
     users.pull()  # Reset
 
 # %% [markdown]
-# ### 4. How to 
+# ### 4. How to
 
 # %%
 print("\n   The correct approach: Delete old row + Insert new row")
@@ -113,7 +117,7 @@ print("   ✓ Deleted row with ID=3")
 
 print("\n   Step 3: Insert new row with new ID")
 new_row = old_row.copy()
-new_row['id'] = 30  # New ID
+new_row["id"] = 30  # New ID
 users.add_row(new_row)
 print("   ✓ Inserted row with ID=30")
 
@@ -127,15 +131,18 @@ print("   ✓ Effectively 'changed' PK from 3 to 30")
 
 # %%
 # Create table with composite PK
-enrollments_data = pd.DataFrame({
-    'student_id': [101, 101, 102],
-    'course_id': ['CS101', 'MATH200', 'CS101'],
-    'grade': ['A', 'B+', 'A-'],
-    'semester': ['Fall2024', 'Fall2024', 'Fall2024']
-})
+enrollments_data = pd.DataFrame(
+    {
+        "student_id": [101, 101, 102],
+        "course_id": ["CS101", "MATH200", "CS101"],
+        "grade": ["A", "B+", "A-"],
+        "semester": ["Fall2024", "Fall2024", "Fall2024"],
+    }
+)
 
-enrollments = db.create_table('enrollments', enrollments_data,
-                               primary_key=['student_id', 'course_id'])
+enrollments = db.create_table(
+    "enrollments", enrollments_data, primary_key=["student_id", "course_id"]
+)
 
 print("\n   Composite PK table:")
 print(enrollments.to_pandas())
@@ -145,24 +152,23 @@ print("   ✓ Both student_id and course_id are in index")
 # Try to update composite PK
 print("\n   Try to update composite PK:")
 try:
-    enrollments.update_row((101, 'CS101'), {
-        'student_id': 999,
-        'grade': 'A+'
-    })
+    enrollments.update_row((101, "CS101"), {"student_id": 999, "grade": "A+"})
     print("      ❌ Should have raised error")
-except DataValidationError as e:
-    print(f"      ✓ Prevented: Cannot update PK components")
+except DataValidationError:
+    print("      ✓ Prevented: Cannot update PK components")
 
 # Correct way for composite PK
 print("\n   Correct way: Delete + Insert")
-old_enrollment = enrollments.get_row((102, 'CS101'))
-enrollments.delete_row((102, 'CS101'))
-enrollments.add_row({
-    'student_id': 103,  # New student
-    'course_id': 'CS101',
-    'grade': old_enrollment['grade'],
-    'semester': old_enrollment['semester']
-})
+old_enrollment = enrollments.get_row((102, "CS101"))
+enrollments.delete_row((102, "CS101"))
+enrollments.add_row(
+    {
+        "student_id": 103,  # New student
+        "course_id": "CS101",
+        "grade": old_enrollment["grade"],
+        "semester": old_enrollment["semester"],
+    }
+)
 enrollments.push()
 
 print("   ✓ Changed student from 102 to 103")
@@ -175,7 +181,7 @@ print(enrollments.to_pandas())
 print("\n   ✓ Safe operations (don't modify PK):")
 print()
 print("   a) Update non-PK columns:")
-users.update_row(1, {'username': 'alice_updated', 'status': 'active'})
+users.update_row(1, {"username": "alice_updated", "status": "active"})
 print("      users.update_row(1, {'username': 'alice_updated'})")
 
 # %% [markdown]
@@ -183,7 +189,7 @@ print("      users.update_row(1, {'username': 'alice_updated'})")
 
 # %%
 user = users.get_row(1)
-print(f"      user = users.get_row(1)")
+print("      user = users.get_row(1)")
 print(f"      Result: {user}")
 
 # %% [markdown]
@@ -205,13 +211,16 @@ users.push()
 
 # %%
 # Create orders table
-orders_data = pd.DataFrame({
-    'customer_id': [1, 1, 2, 2],
-    'amount': [99.99, 149.50, 299.99, 49.99],
-    'status': ['paid', 'paid', 'paid', 'pending']
-}, index=[1001, 1002, 1003, 1004])
+orders_data = pd.DataFrame(
+    {
+        "customer_id": [1, 1, 2, 2],
+        "amount": [99.99, 149.50, 299.99, 49.99],
+        "status": ["paid", "paid", "paid", "pending"],
+    },
+    index=[1001, 1002, 1003, 1004],
+)
 
-orders = db.create_table('orders', orders_data, primary_key='order_id')
+orders = db.create_table("orders", orders_data, primary_key="order_id")
 
 print("\n   Orders table:")
 print(orders.to_pandas())
@@ -249,22 +258,25 @@ print("\n      ⚠ Don't push after reset_index (PK structure changed)")
 print("\n   Why PK immutability matters:")
 
 print("\n   Products table:")
-products_data = pd.DataFrame({
-    'name': ['Widget', 'Gadget', 'Doohickey'],
-    'price': [9.99, 19.99, 29.99]
-}, index=[100, 101, 102])
+products_data = pd.DataFrame(
+    {"name": ["Widget", "Gadget", "Doohickey"], "price": [9.99, 19.99, 29.99]},
+    index=[100, 101, 102],
+)
 
-products = db.create_table('products', products_data, primary_key='product_id')
+products = db.create_table("products", products_data, primary_key="product_id")
 print(products.to_pandas())
 
 print("\n   Order Items (references products):")
-items_data = pd.DataFrame({
-    'order_id': [1001, 1001, 1002],
-    'product_id': [100, 101, 102],  # Foreign keys
-    'quantity': [2, 1, 3]
-}, index=[1, 2, 3])
+items_data = pd.DataFrame(
+    {
+        "order_id": [1001, 1001, 1002],
+        "product_id": [100, 101, 102],  # Foreign keys
+        "quantity": [2, 1, 3],
+    },
+    index=[1, 2, 3],
+)
 
-items = db.create_table('order_items', items_data, primary_key='item_id')
+items = db.create_table("order_items", items_data, primary_key="item_id")
 print(items.to_pandas())
 
 print("\n   If we could change product_id=100 to product_id=999:")
@@ -276,21 +288,18 @@ print("   • Hence: PRIMARY KEYs are IMMUTABLE")
 # ### 9. Auto-Increment and Immutability
 
 # %%
-posts_data = pd.DataFrame({
-    'title': ['Post 1', 'Post 2'],
-    'content': ['Content 1', 'Content 2']
-}, index=[1, 2])
+posts_data = pd.DataFrame(
+    {"title": ["Post 1", "Post 2"], "content": ["Content 1", "Content 2"]}, index=[1, 2]
+)
 
-posts = pa.TableDataFrame('posts', posts_data, 'post_id', engine,
-                           auto_increment=True)
+posts = pa.TableDataFrame("posts", posts_data, "post_id", engine, auto_increment=True)
 posts.push()
 
 print("\n   Posts with auto-increment:")
 print(posts.to_pandas())
 
 # Add new post
-posts.add_row({'title': 'Post 3', 'content': 'Content 3'}, 
-              auto_increment=True)
+posts.add_row({"title": "Post 3", "content": "Content 3"}, auto_increment=True)
 posts.push()
 
 print(f"\n   New post ID: {posts._data.index.max()}")

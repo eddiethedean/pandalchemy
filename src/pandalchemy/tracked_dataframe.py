@@ -64,49 +64,89 @@ class TableDataFrame:
     # Methods that modify the DataFrame and should be tracked
     _MUTATING_METHODS = {
         # Original methods with inplace support
-        'drop', 'drop_duplicates', 'dropna', 'fillna', 'replace',
-        'sort_values', 'sort_index', 'reset_index', 'set_index',
-        'rename', 'insert', 'pop', 'update',
+        "drop",
+        "drop_duplicates",
+        "dropna",
+        "fillna",
+        "replace",
+        "sort_values",
+        "sort_index",
+        "reset_index",
+        "set_index",
+        "rename",
+        "insert",
+        "pop",
+        "update",
         # Pandas 2.0 additional mutating methods with inplace
-        'bfill', 'ffill', 'interpolate',  # Filling methods
-        'clip', 'mask', 'where',  # Conditional methods
-        'eval'  # Expression evaluation
+        "bfill",
+        "ffill",
+        "interpolate",  # Filling methods
+        "clip",
+        "mask",
+        "where",  # Conditional methods
+        "eval",  # Expression evaluation
     }
 
     # Methods that return a new DataFrame (should not track on call, but on assignment)
     _RETURNING_METHODS = {
         # Basic selection
-        'copy', 'head', 'tail', 'sample', 'query', 'filter',
-        'select_dtypes', 'nlargest', 'nsmallest', 'between_time', 'at_time',
-
+        "copy",
+        "head",
+        "tail",
+        "sample",
+        "query",
+        "filter",
+        "select_dtypes",
+        "nlargest",
+        "nsmallest",
+        "between_time",
+        "at_time",
         # Type operations
-        'astype', 'convert_dtypes', 'infer_objects',
-
+        "astype",
+        "convert_dtypes",
+        "infer_objects",
         # Application and transformation
-        'apply', 'applymap', 'map', 'transform', 'aggregate', 'agg',
-        'assign', 'abs', 'round', 'pct_change', 'diff', 'shift',
-
+        "apply",
+        "applymap",
+        "map",
+        "transform",
+        "aggregate",
+        "agg",
+        "assign",
+        "abs",
+        "round",
+        "pct_change",
+        "diff",
+        "shift",
         # Ranking and sorting
-        'rank',
-
+        "rank",
         # Combining DataFrames
-        'merge', 'join', 'combine_first', 'append',
-
+        "merge",
+        "join",
+        "combine_first",
+        "append",
         # Reshaping and pivoting
-        'pivot', 'pivot_table', 'melt', 'stack', 'unstack',
-        'transpose', 'explode', 'squeeze',
-
+        "pivot",
+        "pivot_table",
+        "melt",
+        "stack",
+        "unstack",
+        "transpose",
+        "explode",
+        "squeeze",
         # Statistics and correlation
-        'corr', 'cov', 'corrwith',
-
+        "corr",
+        "cov",
+        "corrwith",
         # Column operations
-        'add_prefix', 'add_suffix',
-
+        "add_prefix",
+        "add_suffix",
         # Indexing operations
-        'align', 'reindex', 'truncate',
-
+        "align",
+        "reindex",
+        "truncate",
         # Set operations
-        'isin',
+        "isin",
     }
 
     def __init__(
@@ -118,7 +158,7 @@ class TableDataFrame:
         db: Any = None,
         schema: str | None = None,
         auto_increment: bool = False,
-        tracker: ChangeTracker | None = None
+        tracker: ChangeTracker | None = None,
     ):
         """
         Initialize a TableDataFrame.
@@ -149,12 +189,12 @@ class TableDataFrame:
             name = None
 
         # Store database-related attributes (use object.__setattr__ to avoid tracker during init)
-        object.__setattr__(self, 'name', name)
-        object.__setattr__(self, 'engine', engine)
-        object.__setattr__(self, 'schema', schema)
-        object.__setattr__(self, 'db', db)
-        object.__setattr__(self, 'auto_increment', auto_increment)
-        object.__setattr__(self, 'key', primary_key)
+        object.__setattr__(self, "name", name)
+        object.__setattr__(self, "engine", engine)
+        object.__setattr__(self, "schema", schema)
+        object.__setattr__(self, "db", db)
+        object.__setattr__(self, "auto_increment", auto_increment)
+        object.__setattr__(self, "key", primary_key)
 
         # Handle case where name is a table name and we should pull from database
         if isinstance(name, str) and engine is not None and data is None:
@@ -164,9 +204,9 @@ class TableDataFrame:
                 if primary_key is None:
                     primary_key = get_primary_key(engine, name, schema)
                     if primary_key is None:
-                        primary_key = 'id'
-                object.__setattr__(self, '_primary_key', primary_key)
-                object.__setattr__(self, 'key', primary_key)
+                        primary_key = "id"
+                object.__setattr__(self, "_primary_key", primary_key)
+                object.__setattr__(self, "key", primary_key)
 
                 # Pull data from database
                 data = pull_table(engine, name, schema, primary_key=primary_key, set_index=True)
@@ -174,9 +214,9 @@ class TableDataFrame:
                 # Table doesn't exist yet
                 data = pd.DataFrame()
                 if primary_key is None:
-                    primary_key = 'id'
-                object.__setattr__(self, '_primary_key', primary_key)
-                object.__setattr__(self, 'key', primary_key)
+                    primary_key = "id"
+                object.__setattr__(self, "_primary_key", primary_key)
+                object.__setattr__(self, "key", primary_key)
         else:
             # Data is provided (either as DataFrame or needs to be created)
             if data is None:
@@ -185,23 +225,29 @@ class TableDataFrame:
             if primary_key is None:
                 # Try to infer from index
                 if isinstance(data.index, pd.MultiIndex):
-                    primary_key = [str(name) for name in data.index.names if name is not None] or ['id']  # type: ignore[misc]
+                    primary_key = [str(name) for name in data.index.names if name is not None] or [
+                        "id"
+                    ]  # type: ignore[misc]
                 elif data.index.name:
                     primary_key = str(data.index.name)  # type: ignore[assignment]
                 else:
-                    primary_key = 'id'
+                    primary_key = "id"
 
-            object.__setattr__(self, '_primary_key', primary_key)
-            object.__setattr__(self, 'key', primary_key)
+            object.__setattr__(self, "_primary_key", primary_key)
+            object.__setattr__(self, "key", primary_key)
 
             # Prepare primary key (handles index naming and validation)
             from pandalchemy.utils import prepare_primary_key_for_table_creation
+
             data = prepare_primary_key_for_table_creation(data, primary_key)
 
             # Ensure PK is set as index if not already
             if isinstance(primary_key, list):
                 # Composite key
-                if not isinstance(data.index, pd.MultiIndex) or list(data.index.names) != primary_key:
+                if (
+                    not isinstance(data.index, pd.MultiIndex)
+                    or list(data.index.names) != primary_key
+                ):
                     if all(col in data.columns for col in primary_key):
                         data = data.set_index(primary_key)
             else:
@@ -209,11 +255,11 @@ class TableDataFrame:
                 if data.index.name != primary_key and primary_key in data.columns:
                     data = data.set_index(primary_key)
 
-        object.__setattr__(self, '_data', data)
+        object.__setattr__(self, "_data", data)
 
         if tracker is None:
             tracker = ChangeTracker(self._primary_key, data)
-        object.__setattr__(self, '_tracker', tracker)
+        object.__setattr__(self, "_tracker", tracker)
 
     def __getattr__(self, name: str) -> Any:
         """
@@ -228,7 +274,7 @@ class TableDataFrame:
             # Wrap mutating methods to track changes
             def wrapped_method(*args, **kwargs):
                 # Check if inplace operation
-                inplace = kwargs.get('inplace', False)
+                inplace = kwargs.get("inplace", False)
 
                 # Record the operation
                 self._tracker.record_operation(name, *args, **kwargs)
@@ -238,16 +284,16 @@ class TableDataFrame:
 
                 if inplace or result is None:
                     # Track column changes for specific operations
-                    if name == 'drop' and kwargs.get('axis') == 1:
+                    if name == "drop" and kwargs.get("axis") == 1:
                         # Dropping columns
                         if isinstance(args[0], (list, tuple)):
                             for col in args[0]:
                                 self._tracker.track_column_drop(col)
                         else:
                             self._tracker.track_column_drop(args[0])
-                    elif name == 'rename' and 'columns' in kwargs:
+                    elif name == "rename" and "columns" in kwargs:
                         # Renaming columns
-                        for old_name, new_name in kwargs['columns'].items():
+                        for old_name, new_name in kwargs["columns"].items():
                             self._tracker.track_column_rename(old_name, new_name)
 
                     # Recompute row changes after mutation
@@ -256,7 +302,9 @@ class TableDataFrame:
                 else:
                     # Return NEW TableDataFrame with INDEPENDENT tracker
                     if isinstance(result, DataFrame):
-                        return TableDataFrame(data=result, primary_key=self._primary_key, tracker=None)
+                        return TableDataFrame(
+                            data=result, primary_key=self._primary_key, tracker=None
+                        )
                     return result
 
             return wrapped_method
@@ -277,7 +325,7 @@ class TableDataFrame:
         """
         Intercept attribute setting to track changes.
         """
-        if name.startswith('_'):
+        if name.startswith("_"):
             # Internal attributes
             object.__setattr__(self, name, value)
         else:
@@ -288,7 +336,7 @@ class TableDataFrame:
                 prop.fset(self, value)
             else:
                 # Setting DataFrame attributes directly
-                self._tracker.record_operation('__setattr__', name, value)
+                self._tracker.record_operation("__setattr__", name, value)
                 setattr(self._data, name, value)
                 self._tracker.compute_row_changes(self._data)
 
@@ -310,7 +358,7 @@ class TableDataFrame:
         """
         Intercept item setting to track changes.
         """
-        self._tracker.record_operation('__setitem__', key, value)
+        self._tracker.record_operation("__setitem__", key, value)
 
         # Track new columns
         if isinstance(key, str) and key not in self._data.columns:
@@ -323,7 +371,7 @@ class TableDataFrame:
         """
         Intercept item deletion to track changes.
         """
-        self._tracker.record_operation('__delitem__', key)
+        self._tracker.record_operation("__delitem__", key)
 
         if isinstance(key, str):
             self._tracker.track_column_drop(key)
@@ -389,7 +437,7 @@ class TableDataFrame:
                 self._tracker.track_column_rename(old, new)
 
         # Record the operation
-        self._tracker.record_operation('set_columns', value)
+        self._tracker.record_operation("set_columns", value)
 
         self._data.columns = value
 
@@ -414,7 +462,7 @@ class TableDataFrame:
         raise DataValidationError(
             "Cannot modify index directly. Primary key values are immutable. "
             "Use add_row() to create new records or delete_row() to remove records.",
-            details={'operation': 'set_index', 'attempted_value': str(value)}
+            details={"operation": "set_index", "attempted_value": str(value)},
         )
 
     @property
@@ -465,7 +513,7 @@ class TableDataFrame:
             db=self.db,
             schema=self.schema,
             auto_increment=self.auto_increment,
-            tracker=new_tracker
+            tracker=new_tracker,
         )
 
     # ============================================================================
@@ -480,6 +528,7 @@ class TableDataFrame:
             List of primary key column names
         """
         from pandalchemy.pk_utils import normalize_primary_key
+
         return normalize_primary_key(self._primary_key)
 
     def _get_pk_condition(self, pk_value: Any) -> Any:
@@ -534,7 +583,7 @@ class TableDataFrame:
             elif all(col in self._data.columns for col in pk_cols):
                 condition = pd.Series([True] * len(self._data), index=self._data.index)
                 for col, val in zip(pk_cols, pk_value):
-                    condition &= (self._data[col] == val)
+                    condition &= self._data[col] == val
                 return condition
             else:
                 # PK not found
@@ -571,7 +620,7 @@ class TableDataFrame:
         if missing_cols:
             raise SchemaError(
                 f"Primary key column(s) {missing_cols} have been dropped from DataFrame",
-                details={'primary_key': pk_cols, 'missing': missing_cols}
+                details={"primary_key": pk_cols, "missing": missing_cols},
             )
 
         # Check for nulls
@@ -579,15 +628,14 @@ class TableDataFrame:
             if col in self._data.columns:
                 if self._data[col].isnull().any():
                     raise DataValidationError(
-                        f"Primary key column '{col}' contains null values",
-                        details={'column': col}
+                        f"Primary key column '{col}' contains null values", details={"column": col}
                     )
             elif self._data.index.name == col:
                 # Single index
                 if self._data.index.isnull().any():  # type: ignore[operator]
                     raise DataValidationError(
                         f"Primary key '{col}' in index contains null values",
-                        details={'column': col}
+                        details={"column": col},
                     )
             elif isinstance(self._data.index, pd.MultiIndex) and col in self._data.index.names:
                 # MultiIndex - check specific level
@@ -595,7 +643,7 @@ class TableDataFrame:
                 if self._data.index.get_level_values(level_idx).isnull().any():  # type: ignore[operator]
                     raise DataValidationError(
                         f"Primary key '{col}' in index contains null values",
-                        details={'column': col}
+                        details={"column": col},
                     )
 
         # Check uniqueness
@@ -605,12 +653,12 @@ class TableDataFrame:
                 if self._data[col].duplicated().any():
                     raise DataValidationError(
                         f"Primary key column '{col}' contains duplicate values",
-                        details={'column': col}
+                        details={"column": col},
                     )
             elif self._data.index.name == col and self._data.index.duplicated().any():
                 raise DataValidationError(
                     f"Primary key in index '{col}' contains duplicate values",
-                    details={'column': col}
+                    details={"column": col},
                 )
         else:
             # Composite key
@@ -619,22 +667,20 @@ class TableDataFrame:
                 if self._data[pk_cols].duplicated().any():
                     raise DataValidationError(
                         f"Primary key combination {pk_cols} contains duplicate values",
-                        details={'columns': pk_cols}
+                        details={"columns": pk_cols},
                     )
-            elif isinstance(self._data.index, pd.MultiIndex) and all(col in self._data.index.names for col in pk_cols):
+            elif isinstance(self._data.index, pd.MultiIndex) and all(
+                col in self._data.index.names for col in pk_cols
+            ):
                 if self._data.index.duplicated().any():
                     raise DataValidationError(
                         f"Primary key combination in index {pk_cols} contains duplicate values",
-                        details={'columns': pk_cols}
+                        details={"columns": pk_cols},
                     )
 
         return True
 
-    def _validate_pk_integrity(
-        self,
-        pk_cols: list[str],
-        raise_on_error: bool = False
-    ) -> list[str]:
+    def _validate_pk_integrity(self, pk_cols: list[str], raise_on_error: bool = False) -> list[str]:
         """
         Validate primary key integrity (nulls and duplicates).
 
@@ -659,14 +705,14 @@ class TableDataFrame:
             if col in self._data.columns and self._data[col].isnull().any():
                 error_msg = f"Primary key column '{col}' contains null values"
                 if raise_on_error:
-                    raise DataValidationError(error_msg, details={'column': col})
+                    raise DataValidationError(error_msg, details={"column": col})
                 errors.append(error_msg)
             elif self._data.index.name == col:
                 # Single index
                 if self._data.index.isnull().any():  # type: ignore[operator]
                     error_msg = f"Primary key '{col}' in index contains null values"
                     if raise_on_error:
-                        raise DataValidationError(error_msg, details={'column': col})
+                        raise DataValidationError(error_msg, details={"column": col})
                     errors.append(error_msg)
             elif isinstance(self._data.index, pd.MultiIndex) and col in self._data.index.names:
                 # MultiIndex - check specific level
@@ -674,7 +720,7 @@ class TableDataFrame:
                 if self._data.index.get_level_values(level_idx).isnull().any():  # type: ignore[operator]
                     error_msg = f"Primary key '{col}' in index contains null values"
                     if raise_on_error:
-                        raise DataValidationError(error_msg, details={'column': col})
+                        raise DataValidationError(error_msg, details={"column": col})
                     errors.append(error_msg)
 
         # Check uniqueness
@@ -682,29 +728,39 @@ class TableDataFrame:
             col = pk_cols[0]
             if col in self._data.columns:
                 if self._data[col].duplicated().any():
-                    error_msg = f"Column '{col}' contains duplicate values" if raise_on_error else f"Primary key column '{col}' contains duplicates"
+                    error_msg = (
+                        f"Column '{col}' contains duplicate values"
+                        if raise_on_error
+                        else f"Primary key column '{col}' contains duplicates"
+                    )
                     if raise_on_error:
-                        raise DataValidationError(error_msg, details={'column': col})
+                        raise DataValidationError(error_msg, details={"column": col})
                     errors.append(error_msg)
             elif self._data.index.name == col:
                 if self._data.index.duplicated().any():
                     error_msg = f"Primary key in index '{col}' contains duplicates"
                     if raise_on_error:
-                        raise DataValidationError(error_msg, details={'column': col})
+                        raise DataValidationError(error_msg, details={"column": col})
                     errors.append(error_msg)
         else:
             # Composite key
             if all(col in self._data.columns for col in pk_cols):
                 if self._data[pk_cols].duplicated().any():
-                    error_msg = f"Column combination {pk_cols} contains duplicate values" if raise_on_error else f"Primary key combination {pk_cols} contains duplicates"
+                    error_msg = (
+                        f"Column combination {pk_cols} contains duplicate values"
+                        if raise_on_error
+                        else f"Primary key combination {pk_cols} contains duplicates"
+                    )
                     if raise_on_error:
-                        raise DataValidationError(error_msg, details={'columns': pk_cols})
+                        raise DataValidationError(error_msg, details={"columns": pk_cols})
                     errors.append(error_msg)
-            elif isinstance(self._data.index, pd.MultiIndex) and all(col in self._data.index.names for col in pk_cols):
+            elif isinstance(self._data.index, pd.MultiIndex) and all(
+                col in self._data.index.names for col in pk_cols
+            ):
                 if self._data.index.duplicated().any():
                     error_msg = f"Primary key combination in index {pk_cols} contains duplicates"
                     if raise_on_error:
-                        raise DataValidationError(error_msg, details={'columns': pk_cols})
+                        raise DataValidationError(error_msg, details={"columns": pk_cols})
                     errors.append(error_msg)
 
         return errors
@@ -807,7 +863,7 @@ class TableDataFrame:
         if missing:
             raise SchemaError(
                 f"Cannot set primary key: column(s) {missing} do not exist",
-                details={'columns': missing}
+                details={"columns": missing},
             )
 
         # Validate uniqueness if requested - use consolidated validation
@@ -830,7 +886,7 @@ class TableDataFrame:
         self._data = set_pk_as_index(self._data, cols)
 
         # Record operation
-        self._tracker.record_operation('set_primary_key', old_pk, column_name)
+        self._tracker.record_operation("set_primary_key", old_pk, column_name)
 
     # Auto-Increment Support
 
@@ -860,7 +916,9 @@ class TableDataFrame:
 
     # CRUD Operations
 
-    def add_row(self, row_data: dict | None = None, validate: bool = True, auto_increment: bool = False) -> None:
+    def add_row(
+        self, row_data: dict | None = None, validate: bool = True, auto_increment: bool = False
+    ) -> None:
         """
         Add a new row to the DataFrame with tracking.
 
@@ -900,13 +958,12 @@ class TableDataFrame:
                     row_data[pk_cols[0]] = next_pk
                 except ValueError as e:
                     raise DataValidationError(
-                        f"Auto-increment failed: {str(e)}",
-                        details={'primary_key': pk_cols[0]}
+                        f"Auto-increment failed: {str(e)}", details={"primary_key": pk_cols[0]}
                     ) from e
             else:
                 raise DataValidationError(
                     f"Row data missing required primary key column(s): {missing}",
-                    details={'missing': missing, 'primary_key': pk_cols}
+                    details={"missing": missing, "primary_key": pk_cols},
                 )
 
         # Check for null values in PK
@@ -914,7 +971,7 @@ class TableDataFrame:
             if row_data.get(pk_col) is None or pd.isna(row_data.get(pk_col)):
                 raise DataValidationError(
                     f"Primary key column '{pk_col}' cannot be null",
-                    details={'primary_key': pk_col, 'row_data': row_data}
+                    details={"primary_key": pk_col, "row_data": row_data},
                 )
 
         # Validate PK doesn't already exist
@@ -926,13 +983,13 @@ class TableDataFrame:
                     if pk_value in self._data[pk_cols[0]].values:
                         raise DataValidationError(
                             f"Primary key value {pk_value} already exists",
-                            details={'primary_key': pk_cols[0], 'value': pk_value}
+                            details={"primary_key": pk_cols[0], "value": pk_value},
                         )
                 elif self._data.index.name == pk_cols[0]:
                     if pk_value in self._data.index.values:
                         raise DataValidationError(
                             f"Primary key value {pk_value} already exists",
-                            details={'primary_key': pk_cols[0], 'value': pk_value}
+                            details={"primary_key": pk_cols[0], "value": pk_value},
                         )
             else:
                 pk_value = tuple(row_data[col] for col in pk_cols)
@@ -940,16 +997,18 @@ class TableDataFrame:
                 if condition.any():
                     raise DataValidationError(
                         f"Primary key combination {pk_value} already exists",
-                        details={'primary_key': pk_cols, 'value': pk_value}
+                        details={"primary_key": pk_cols, "value": pk_value},
                     )
 
         # Add the row
         pk_cols = self._get_pk_columns()
-        self._tracker.record_operation('add_row', row_data)
+        self._tracker.record_operation("add_row", row_data)
 
         # Check if PK is in index
-        if (len(pk_cols) == 1 and self._data.index.name == pk_cols[0]) or \
-           (isinstance(self._data.index, pd.MultiIndex) and all(name in self._data.index.names for name in pk_cols)):
+        if (len(pk_cols) == 1 and self._data.index.name == pk_cols[0]) or (
+            isinstance(self._data.index, pd.MultiIndex)
+            and all(name in self._data.index.names for name in pk_cols)
+        ):
             # PK is in index - create new row with proper index
             if len(pk_cols) == 1:
                 new_index = row_data[pk_cols[0]]
@@ -1006,7 +1065,7 @@ class TableDataFrame:
                 f"Cannot update primary key column(s): {pk_in_updates}. "
                 "Primary keys are immutable. To change a primary key, "
                 "delete the row and insert a new one with the desired key.",
-                details={'attempted_pk_updates': pk_in_updates, 'primary_key': pk_cols}
+                details={"attempted_pk_updates": pk_in_updates, "primary_key": pk_cols},
             )
 
         condition = self._get_pk_condition(primary_key_value)
@@ -1014,7 +1073,7 @@ class TableDataFrame:
         if not condition.any():
             raise ValueError(f"No row found with primary key value: {primary_key_value}")
 
-        self._tracker.record_operation('update_row', primary_key_value, updates)
+        self._tracker.record_operation("update_row", primary_key_value, updates)
 
         for col, value in updates.items():
             self._data.loc[condition, col] = value
@@ -1022,10 +1081,7 @@ class TableDataFrame:
         self._tracker.compute_row_changes(self._data)
 
     def update_where(
-        self,
-        condition: pd.Series | Any,
-        updates: dict[str, Any] | Any,
-        column: str | None = None
+        self, condition: pd.Series | Any, updates: dict[str, Any] | Any, column: str | None = None
     ) -> None:
         """
         Update rows matching a condition - similar to SQL UPDATE...WHERE.
@@ -1073,12 +1129,16 @@ class TableDataFrame:
         # Handle shorthand syntax: update_where(condition, value, column='col')
         if column is not None:
             if isinstance(updates, dict):
-                raise ValueError("When 'column' is specified, 'updates' should be a single value, not a dict")
+                raise ValueError(
+                    "When 'column' is specified, 'updates' should be a single value, not a dict"
+                )
             updates = {column: updates}
 
         # Validate updates is a dictionary
         if not isinstance(updates, dict):
-            raise ValueError("'updates' must be a dictionary of {column: value_or_function} or a single value with column parameter")
+            raise ValueError(
+                "'updates' must be a dictionary of {column: value_or_function} or a single value with column parameter"
+            )
 
         # Get PK columns for validation
         pk_cols = self._get_pk_columns()
@@ -1090,7 +1150,7 @@ class TableDataFrame:
                 f"Cannot update primary key column(s): {pk_in_updates}. "
                 "Primary keys are immutable. To change a primary key, "
                 "delete the row and insert a new one with the desired key.",
-                details={'attempted_pk_updates': pk_in_updates, 'primary_key': pk_cols}
+                details={"attempted_pk_updates": pk_in_updates, "primary_key": pk_cols},
             )
 
         # Validate all columns exist
@@ -1099,7 +1159,7 @@ class TableDataFrame:
                 raise ValueError(f"Column '{col}' does not exist in DataFrame")
 
         # Record operation
-        self._tracker.record_operation('update_where', condition, updates)
+        self._tracker.record_operation("update_where", condition, updates)
 
         # Apply each update
         for col, value in updates.items():
@@ -1135,12 +1195,14 @@ class TableDataFrame:
         if not condition.any():
             raise ValueError(f"No row found with primary key value: {primary_key_value}")
 
-        self._tracker.record_operation('delete_row', primary_key_value)
+        self._tracker.record_operation("delete_row", primary_key_value)
 
         # Delete the row, preserving index if PK is in index
         pk_cols = self._get_pk_columns()
-        if (len(pk_cols) == 1 and self._data.index.name == pk_cols[0]) or \
-           (isinstance(self._data.index, pd.MultiIndex) and all(name in self._data.index.names for name in pk_cols)):
+        if (len(pk_cols) == 1 and self._data.index.name == pk_cols[0]) or (
+            isinstance(self._data.index, pd.MultiIndex)
+            and all(name in self._data.index.names for name in pk_cols)
+        ):
             # PK is in index - just filter out the row, keep index intact
             self._data = self._data[~condition]
         else:
@@ -1182,15 +1244,19 @@ class TableDataFrame:
             when push() is called.
         """
         # Record operation
-        self._tracker.record_operation('delete_where', condition)
+        self._tracker.record_operation("delete_where", condition)
 
         # Count rows to be deleted
-        rows_to_delete = condition.sum() if hasattr(condition, 'sum') else len([x for x in condition if x])
+        rows_to_delete = (
+            condition.sum() if hasattr(condition, "sum") else len([x for x in condition if x])
+        )
 
         # Delete matching rows (keep rows where condition is False)
         pk_cols = self._get_pk_columns()
-        if (len(pk_cols) == 1 and self._data.index.name == pk_cols[0]) or \
-           (isinstance(self._data.index, pd.MultiIndex) and all(name in self._data.index.names for name in pk_cols)):
+        if (len(pk_cols) == 1 and self._data.index.name == pk_cols[0]) or (
+            isinstance(self._data.index, pd.MultiIndex)
+            and all(name in self._data.index.names for name in pk_cols)
+        ):
             # PK is in index - filter out matching rows, keep index intact
             self._data = self._data[~condition]
         else:
@@ -1221,7 +1287,7 @@ class TableDataFrame:
         if missing:
             raise DataValidationError(
                 f"Row data missing required primary key column(s): {missing}",
-                details={'missing': missing, 'primary_key': pk_cols}
+                details={"missing": missing, "primary_key": pk_cols},
             )
 
         # Extract PK value
@@ -1264,7 +1330,7 @@ class TableDataFrame:
             if missing:
                 raise DataValidationError(
                     f"Row {i} missing required primary key column(s): {missing}",
-                    details={'row_index': i, 'missing': missing}
+                    details={"row_index": i, "missing": missing},
                 )
 
         # Check for duplicate PKs in the new rows
@@ -1273,13 +1339,13 @@ class TableDataFrame:
             if new_df[pk_cols[0]].duplicated().any():
                 raise DataValidationError(
                     "Bulk insert contains duplicate primary key values",
-                    details={'column': pk_cols[0]}
+                    details={"column": pk_cols[0]},
                 )
         else:
             if new_df[pk_cols].duplicated().any():
                 raise DataValidationError(
                     "Bulk insert contains duplicate primary key combinations",
-                    details={'columns': pk_cols}
+                    details={"columns": pk_cols},
                 )
 
         # Check for conflicts with existing data
@@ -1298,14 +1364,16 @@ class TableDataFrame:
             if conflicts:
                 raise DataValidationError(
                     f"Bulk insert contains {len(conflicts)} primary key(s) that already exist",
-                    details={'conflicts': list(conflicts)[:10]}  # Show first 10
+                    details={"conflicts": list(conflicts)[:10]},  # Show first 10
                 )
 
-        self._tracker.record_operation('bulk_insert', len(rows))
+        self._tracker.record_operation("bulk_insert", len(rows))
 
         # Handle concat based on whether PK is in index
-        if (len(pk_cols) == 1 and self._data.index.name == pk_cols[0]) or \
-           (isinstance(self._data.index, pd.MultiIndex) and all(name in self._data.index.names for name in pk_cols)):
+        if (len(pk_cols) == 1 and self._data.index.name == pk_cols[0]) or (
+            isinstance(self._data.index, pd.MultiIndex)
+            and all(name in self._data.index.names for name in pk_cols)
+        ):
             # PK is in index - set new rows with proper index
             if len(pk_cols) == 1:
                 new_df_indexed = new_df.set_index(pk_cols[0])
@@ -1354,10 +1422,7 @@ class TableDataFrame:
     # Schema Operations
 
     def add_column_with_default(
-        self,
-        name: str,
-        default_value: Any,
-        dtype: type | None = None
+        self, name: str, default_value: Any, dtype: type | None = None
     ) -> None:
         """
         Add a new column with a default value.
@@ -1373,12 +1438,9 @@ class TableDataFrame:
         from pandalchemy.exceptions import SchemaError
 
         if name in self._data.columns:
-            raise SchemaError(
-                f"Column '{name}' already exists",
-                details={'column': name}
-            )
+            raise SchemaError(f"Column '{name}' already exists", details={"column": name})
 
-        self._tracker.record_operation('add_column_with_default', name, default_value, dtype)
+        self._tracker.record_operation("add_column_with_default", name, default_value, dtype)
         self._data[name] = default_value
 
         if dtype is not None:
@@ -1399,12 +1461,9 @@ class TableDataFrame:
         from pandalchemy.exceptions import SchemaError
 
         if name not in self._data.columns:
-            raise SchemaError(
-                f"Column '{name}' does not exist",
-                details={'column': name}
-            )
+            raise SchemaError(f"Column '{name}' does not exist", details={"column": name})
 
-        self._tracker.record_operation('drop_column_safe', name)
+        self._tracker.record_operation("drop_column_safe", name)
         self._data = self._data.drop(columns=[name])
         self._tracker.track_column_drop(name)
 
@@ -1422,18 +1481,12 @@ class TableDataFrame:
         from pandalchemy.exceptions import SchemaError
 
         if old_name not in self._data.columns:
-            raise SchemaError(
-                f"Column '{old_name}' does not exist",
-                details={'column': old_name}
-            )
+            raise SchemaError(f"Column '{old_name}' does not exist", details={"column": old_name})
 
         if new_name in self._data.columns:
-            raise SchemaError(
-                f"Column '{new_name}' already exists",
-                details={'column': new_name}
-            )
+            raise SchemaError(f"Column '{new_name}' already exists", details={"column": new_name})
 
-        self._tracker.record_operation('rename_column_safe', old_name, new_name)
+        self._tracker.record_operation("rename_column_safe", old_name, new_name)
         self._data = self._data.rename(columns={old_name: new_name})
         self._tracker.track_column_rename(old_name, new_name)
 
@@ -1462,12 +1515,9 @@ class TableDataFrame:
         from pandalchemy.exceptions import SchemaError
 
         if column not in self._data.columns:
-            raise SchemaError(
-                f"Column '{column}' does not exist",
-                details={'column': column}
-            )
+            raise SchemaError(f"Column '{column}' does not exist", details={"column": column})
 
-        self._tracker.record_operation('change_column_type', column, new_type)
+        self._tracker.record_operation("change_column_type", column, new_type)
         self._tracker.track_column_type_change(column, new_type)
 
         try:
@@ -1505,9 +1555,9 @@ class TableDataFrame:
         )
 
         if engine is not None:
-            object.__setattr__(self, 'engine', engine)
+            object.__setattr__(self, "engine", engine)
         if schema is not None:
-            object.__setattr__(self, 'schema', schema)
+            object.__setattr__(self, "schema", schema)
 
         # Ensure engine is available
         if self.engine is None:
@@ -1523,11 +1573,7 @@ class TableDataFrame:
         except (SchemaError, DataValidationError) as e:
             raise SchemaError(
                 f"Cannot push table '{self.name}': {str(e)}",
-                details={
-                    'table': self.name,
-                    'primary_key': self._primary_key,
-                    'error': str(e)
-                }
+                details={"table": self.name, "primary_key": self._primary_key, "error": str(e)},
             ) from e
 
         # Get the current pandas DataFrame
@@ -1540,22 +1586,11 @@ class TableDataFrame:
         if not table_exists(self.engine, self.name, self.schema):
             # Create new table
             create_table_from_dataframe(
-                self.engine,
-                self.name,
-                current_df,
-                self._primary_key,
-                self.schema,
-                if_exists='fail'
+                self.engine, self.name, current_df, self._primary_key, self.schema, if_exists="fail"
             )
         else:
             # Execute the plan to update existing table
-            execute_plan(
-                self.engine,
-                self.name,
-                plan,
-                self.schema,
-                self._primary_key
-            )
+            execute_plan(self.engine, self.name, plan, self.schema, self._primary_key)
 
         # Refresh the table after successful push
         self.pull()
@@ -1590,11 +1625,7 @@ class TableDataFrame:
         except (SchemaError, DataValidationError) as e:
             raise SchemaError(
                 f"Cannot push table '{self.name}': {str(e)}",
-                details={
-                    'table': self.name,
-                    'primary_key': self._primary_key,
-                    'error': str(e)
-                }
+                details={"table": self.name, "primary_key": self._primary_key, "error": str(e)},
             ) from e
 
         current_df = self.to_pandas()
@@ -1608,22 +1639,11 @@ class TableDataFrame:
         if not table_exists(self.engine, self.name, self.schema):
             # Create new table
             create_table_from_dataframe(
-                self.engine,
-                self.name,
-                current_df,
-                self._primary_key,
-                self.schema,
-                if_exists='fail'
+                self.engine, self.name, current_df, self._primary_key, self.schema, if_exists="fail"
             )
         else:
             # Execute plan
-            execute_plan(
-                self.engine,
-                self.name,
-                plan,
-                self.schema,
-                self._primary_key
-            )
+            execute_plan(self.engine, self.name, plan, self.schema, self._primary_key)
 
     def pull(self, engine: Engine | None = None, schema: str | None = None) -> None:
         """
@@ -1636,9 +1656,9 @@ class TableDataFrame:
         from pandalchemy.sql_operations import get_primary_key, pull_table
 
         if engine is not None:
-            object.__setattr__(self, 'engine', engine)
+            object.__setattr__(self, "engine", engine)
         if schema is not None:
-            object.__setattr__(self, 'schema', schema)
+            object.__setattr__(self, "schema", schema)
 
         # Re-initialize from database
         if self.engine and self.name:
@@ -1646,22 +1666,18 @@ class TableDataFrame:
             if self._primary_key is None:  # type: ignore[unreachable]
                 pk = get_primary_key(self.engine, self.name, self.schema)  # type: ignore[unreachable]
                 if pk:  # type: ignore[unreachable]
-                    object.__setattr__(self, '_primary_key', pk)  # type: ignore[unreachable]
-                    object.__setattr__(self, 'key', pk)
+                    object.__setattr__(self, "_primary_key", pk)  # type: ignore[unreachable]
+                    object.__setattr__(self, "key", pk)
 
             # Pull fresh data
             data = pull_table(
-                self.engine,
-                self.name,
-                self.schema,
-                primary_key=self._primary_key,
-                set_index=True
+                self.engine, self.name, self.schema, primary_key=self._primary_key, set_index=True
             )
-            object.__setattr__(self, '_data', data)
+            object.__setattr__(self, "_data", data)
 
             # Reset tracker with fresh data
             tracker = ChangeTracker(self._primary_key, data)
-            object.__setattr__(self, '_tracker', tracker)
+            object.__setattr__(self, "_tracker", tracker)
 
     def _generate_next_pk(self) -> int:
         """
@@ -1714,18 +1730,19 @@ class TableDataFrame:
 
                     table_ref = sa_table(self.name, schema=self.schema)
                     pk_column: ColumnClause[Any] = column(self._primary_key)
-                    query = select(func.max(pk_column).label('max_id')).select_from(table_ref)
+                    query = select(func.max(pk_column).label("max_id")).select_from(table_ref)
                     result = conn.execute(query).fetchone()
                     if result and result[0] is not None:
                         db_max = int(result[0])
             except Exception as e:
                 # If query fails, use local max
                 import warnings
+
                 warnings.warn(
                     f"Failed to query database for max PK value in table '{self.name}', "
                     f"using local max only. Error: {type(e).__name__}: {str(e)}",
                     UserWarning,
-                    stacklevel=2
+                    stacklevel=2,
                 )
 
         return max(local_max, db_max) + 1
@@ -1746,7 +1763,7 @@ class TrackedLocIndexer:
         return result
 
     def __setitem__(self, key, value):
-        self.parent._tracker.record_operation('loc.__setitem__', key, value)
+        self.parent._tracker.record_operation("loc.__setitem__", key, value)
         self.indexer[key] = value
         self.parent._tracker.compute_row_changes(self.parent._data)
 
@@ -1766,7 +1783,7 @@ class TrackedIlocIndexer:
         return result
 
     def __setitem__(self, key, value):
-        self.parent._tracker.record_operation('iloc.__setitem__', key, value)
+        self.parent._tracker.record_operation("iloc.__setitem__", key, value)
         self.indexer[key] = value
         self.parent._tracker.compute_row_changes(self.parent._data)
 
@@ -1782,7 +1799,7 @@ class TrackedAtIndexer:
         return self.indexer[key]
 
     def __setitem__(self, key, value):
-        self.parent._tracker.record_operation('at.__setitem__', key, value)
+        self.parent._tracker.record_operation("at.__setitem__", key, value)
         self.indexer[key] = value
         self.parent._tracker.compute_row_changes(self.parent._data)
 
@@ -1798,7 +1815,6 @@ class TrackedIatIndexer:
         return self.indexer[key]
 
     def __setitem__(self, key, value):
-        self.parent._tracker.record_operation('iat.__setitem__', key, value)
+        self.parent._tracker.record_operation("iat.__setitem__", key, value)
         self.indexer[key] = value
         self.parent._tracker.compute_row_changes(self.parent._data)
-

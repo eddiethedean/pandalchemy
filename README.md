@@ -4,7 +4,7 @@
 
 Work with database tables as pandas DataFrames while pandalchemy automatically tracks changes and syncs to your database with optimized SQL operations.
 
-[![Tests](https://img.shields.io/badge/tests-426%20passing-brightgreen)](https://github.com/eddiethedean/pandalchemy)
+[![Tests](https://img.shields.io/badge/tests-534%20passing-brightgreen)](https://github.com/eddiethedean/pandalchemy)
 [![Type Checked](https://img.shields.io/badge/mypy-passing-blue)](https://github.com/eddiethedean/pandalchemy)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org)
 
@@ -170,12 +170,14 @@ pip install pandalchemy
 ### Supported Databases
 
 Works with any SQLAlchemy-supported database:
-- PostgreSQL
-- MySQL/MariaDB
+- PostgreSQL (fully tested)
+- MySQL/MariaDB (fully tested)
 - SQLite
 - Oracle
 - SQL Server
 - And more
+
+**Multi-Database Testing**: pandalchemy is extensively tested on PostgreSQL and MySQL with 534 tests ensuring cross-platform compatibility. Over 150+ tests run on multiple database backends (SQLite, PostgreSQL, MySQL) to validate consistent behavior across platforms.
 
 ---
 
@@ -457,7 +459,19 @@ pip install -e ".[dev]"
 ### Run Tests
 
 ```bash
+# Run all tests (SQLite only)
 pytest tests/
+
+# Run PostgreSQL tests (requires testing.postgresql)
+pytest -m postgres
+
+# Run MySQL tests (requires testing.mysqld)
+pytest -m mysql
+
+# Run all multi-database tests
+pytest -m multidb
+
+# See tests/TESTING_MULTI_DB.md for setup instructions
 ```
 
 ### Code Quality
@@ -516,7 +530,17 @@ Built with:
 
 ## Version History
 
-### 1.0.0 (Latest) 🎉
+### 1.1.0 (Latest) 🎉
+- **Multi-Database Support**: Full PostgreSQL and MySQL compatibility with 534 tests, 150+ running on multiple databases
+- **Database-Specific Optimizations**: Raw SQL paths for PostgreSQL/MySQL to avoid metadata lock issues
+- **Schema Evolution Improvements**: Proper handling of MySQL VARCHAR length requirements and column rename operations
+- **Connection Management**: Improved connection pooling and transaction handling for production databases
+- **Transaction Fixes**: Fixed DELETE operations in complex transactions with schema changes
+- **Testing Infrastructure**: Added `testing.postgresql` and `testing.mysqld` for isolated test environments
+- **Performance**: Optimized table introspection using `inspect(engine)` and `autoload_with` for better transaction visibility
+- **Code Quality**: Full ruff and mypy compliance with 0 errors
+
+### 1.0.0
 - **Major refactoring**: Merged Table and TrackedDataFrame into unified TableDataFrame
 - **New feature**: Column type change tracking with ALTER COLUMN support
 - **New methods**: update_where() and delete_where() for conditional operations

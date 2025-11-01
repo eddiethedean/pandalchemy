@@ -1,6 +1,5 @@
 """Tests for CLI functionality."""
 
-
 import pytest
 from sqlalchemy import create_engine, text
 
@@ -10,29 +9,29 @@ from pandalchemy.cli import info_command, main, validate_command
 def test_cli_help(capsys):
     """Test CLI help output."""
     with pytest.raises(SystemExit) as exc_info:
-        main(['pandalchemy', '--help'])
+        main(["pandalchemy", "--help"])
 
     assert exc_info.value.code == 0
     captured = capsys.readouterr()
     output = captured.out + captured.err
-    assert 'pandalchemy' in output.lower() or 'usage' in output.lower()
+    assert "pandalchemy" in output.lower() or "usage" in output.lower()
 
 
 def test_cli_version(capsys):
     """Test --version flag."""
     with pytest.raises(SystemExit) as exc_info:
-        main(['pandalchemy', '--version'])
+        main(["pandalchemy", "--version"])
 
     assert exc_info.value.code == 0
     captured = capsys.readouterr()
     output = captured.out + captured.err
-    assert '1.0.0' in output
+    assert "1.1.0" in output
 
 
 def test_cli_no_arguments(capsys):
     """Test CLI with no arguments shows help."""
     with pytest.raises(SystemExit) as exc_info:
-        main(['pandalchemy'])
+        main(["pandalchemy"])
 
     assert exc_info.value.code == 0
 
@@ -43,18 +42,18 @@ def test_info_command(capsys):
 
     assert result == 0
     captured = capsys.readouterr()
-    assert 'Pandalchemy Version' in captured.out
-    assert '1.0.0' in captured.out
-    assert 'Features:' in captured.out
+    assert "Pandalchemy Version" in captured.out
+    assert "1.1.0" in captured.out
+    assert "Features:" in captured.out
 
 
 def test_cli_info_command(capsys):
     """Test info command via CLI."""
-    result = main(['pandalchemy', 'info'])
+    result = main(["pandalchemy", "info"])
 
     assert result == 0
     captured = capsys.readouterr()
-    assert 'Pandalchemy Version' in captured.out
+    assert "Pandalchemy Version" in captured.out
 
 
 def test_validate_command_valid_connection(capsys, tmp_path):
@@ -73,8 +72,8 @@ def test_validate_command_valid_connection(capsys, tmp_path):
 
     assert result == 0
     captured = capsys.readouterr()
-    assert 'Connection successful' in captured.out
-    assert 'Found' in captured.out
+    assert "Connection successful" in captured.out
+    assert "Found" in captured.out
 
 
 def test_validate_command_invalid_connection(capsys):
@@ -84,7 +83,7 @@ def test_validate_command_invalid_connection(capsys):
     assert result == 1
     captured = capsys.readouterr()
     output = captured.out + captured.err
-    assert 'failed' in output.lower() or 'error' in output.lower()
+    assert "failed" in output.lower() or "error" in output.lower()
 
 
 def test_cli_validate_valid(capsys, tmp_path):
@@ -98,14 +97,14 @@ def test_cli_validate_valid(capsys, tmp_path):
         conn.execute(text("CREATE TABLE test (id INTEGER)"))
     engine.dispose()
 
-    result = main(['pandalchemy', 'validate', connection_string])
+    result = main(["pandalchemy", "validate", connection_string])
 
     assert result == 0
 
 
 def test_cli_validate_invalid(capsys):
     """Test validate command via CLI with invalid connection."""
-    result = main(['pandalchemy', 'validate', 'invalid://connection'])
+    result = main(["pandalchemy", "validate", "invalid://connection"])
 
     assert result == 1
 
@@ -127,8 +126,8 @@ def test_validate_command_with_tables(capsys, tmp_path):
 
     assert result == 0
     captured = capsys.readouterr()
-    assert 'Found 3 table' in captured.out
-    assert 'users' in captured.out or 'Tables:' in captured.out
+    assert "Found 3 table" in captured.out
+    assert "users" in captured.out or "Tables:" in captured.out
 
 
 def test_validate_command_many_tables(capsys, tmp_path):
@@ -147,8 +146,8 @@ def test_validate_command_many_tables(capsys, tmp_path):
 
     assert result == 0
     captured = capsys.readouterr()
-    assert 'Found 15 table' in captured.out
-    assert '... and 5 more' in captured.out or 'and 5 more' in captured.out
+    assert "Found 15 table" in captured.out
+    assert "... and 5 more" in captured.out or "and 5 more" in captured.out
 
 
 def test_cli_info_shows_dependencies(capsys):
@@ -157,9 +156,9 @@ def test_cli_info_shows_dependencies(capsys):
 
     assert result == 0
     captured = capsys.readouterr()
-    assert 'Pandas Version' in captured.out
-    assert 'SQLAlchemy Version' in captured.out
-    assert 'Python Version' in captured.out
+    assert "Pandas Version" in captured.out
+    assert "SQLAlchemy Version" in captured.out
+    assert "Python Version" in captured.out
 
 
 def test_validate_empty_database(capsys, tmp_path):
@@ -175,7 +174,7 @@ def test_validate_empty_database(capsys, tmp_path):
 
     assert result == 0
     captured = capsys.readouterr()
-    assert 'Found 0 table' in captured.out
+    assert "Found 0 table" in captured.out
 
 
 def test_info_command_shows_github_link(capsys):
@@ -184,5 +183,4 @@ def test_info_command_shows_github_link(capsys):
 
     assert result == 0
     captured = capsys.readouterr()
-    assert 'github' in captured.out.lower()
-
+    assert "github" in captured.out.lower()

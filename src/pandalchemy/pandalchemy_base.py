@@ -66,17 +66,15 @@ class DataBase(IDataBase):
         # Clear existing tables
         self.db.clear()
 
+        # Use inspect(engine) with explicit connection context for table names
+        # This ensures connection is properly closed
         inspector = inspect(self.engine)
+        # get_table_names() creates and closes its own connection internally
         table_names = inspector.get_table_names(schema=self.schema)
 
         if not self.lazy:
             self.db = {
-                name: TableDataFrame(
-                    name=name,
-                    engine=self.engine,
-                    db=self,
-                    schema=self.schema
-                )
+                name: TableDataFrame(name=name, engine=self.engine, db=self, schema=self.schema)
                 for name in table_names
             }
         else:
@@ -134,7 +132,7 @@ class DataBase(IDataBase):
         # Execute all pushes within a single transaction
         with self.engine.begin() as connection:
             for _table_name, table in self.db.items():
-                if table is not None and hasattr(table, 'push'):
+                if table is not None and hasattr(table, "push"):
                     # Push using the connection from the transaction
                     table._push_with_connection(connection)
 
@@ -154,18 +152,14 @@ class DataBase(IDataBase):
             push: If True, immediately push the table to the database
         """
         self.db[table.name] = table
-        object.__setattr__(table, 'db', self)
-        object.__setattr__(table, 'engine', self.engine)
-        object.__setattr__(table, 'schema', self.schema)
+        object.__setattr__(table, "db", self)
+        object.__setattr__(table, "engine", self.engine)
+        object.__setattr__(table, "schema", self.schema)
         if push:
             self.push()
 
     def create_table(
-        self,
-        name: str,
-        data: DataFrame,
-        primary_key: str = 'id',
-        if_exists: str = 'fail'
+        self, name: str, data: DataFrame, primary_key: str = "id", if_exists: str = "fail"
     ) -> TableDataFrame:
         """
         Create a new table from a DataFrame.
@@ -180,12 +174,7 @@ class DataBase(IDataBase):
             TableDataFrame object for the new table
         """
         create_table_from_dataframe(
-            self.engine,
-            name,
-            data,
-            primary_key,
-            schema=self.schema,
-            if_exists=if_exists
+            self.engine, name, data, primary_key, schema=self.schema, if_exists=if_exists
         )
 
         # Refresh and return the new table

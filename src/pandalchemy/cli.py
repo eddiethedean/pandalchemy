@@ -24,40 +24,31 @@ def main(argv=None):
         argv = sys.argv
 
     parser = argparse.ArgumentParser(
-        prog='pandalchemy',
-        description='Pandalchemy - Pandas + SQLAlchemy with Change Tracking',
-        epilog='For more information, visit: https://github.com/eddiethedean/pandalchemy'
+        prog="pandalchemy",
+        description="Pandalchemy - Pandas + SQLAlchemy with Change Tracking",
+        epilog="For more information, visit: https://github.com/eddiethedean/pandalchemy",
     )
 
-    parser.add_argument(
-        '--version',
-        action='version',
-        version=f'pandalchemy {__version__}'
-    )
+    parser.add_argument("--version", action="version", version=f"pandalchemy {__version__}")
 
-    subparsers = parser.add_subparsers(dest='command', help='Available commands')
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # Info command
-    subparsers.add_parser(
-        'info',
-        help='Display information about pandalchemy installation'
-    )
+    subparsers.add_parser("info", help="Display information about pandalchemy installation")
 
     # Validate command
     validate_parser = subparsers.add_parser(
-        'validate',
-        help='Validate a database connection string'
+        "validate", help="Validate a database connection string"
     )
     validate_parser.add_argument(
-        'connection_string',
-        help='Database connection string (e.g., sqlite:///example.db)'
+        "connection_string", help="Database connection string (e.g., sqlite:///example.db)"
     )
 
-    args = parser.parse_args(argv[1:] if len(argv) > 1 else ['--help'])
+    args = parser.parse_args(argv[1:] if len(argv) > 1 else ["--help"])
 
-    if args.command == 'info':
+    if args.command == "info":
         return info_command()
-    elif args.command == 'validate':
+    elif args.command == "validate":
         return validate_command(args.connection_string)
 
     return 0
@@ -107,6 +98,7 @@ def validate_command(connection_string: str):
 
             # Try to get table names
             from sqlalchemy import inspect
+
             inspector = inspect(engine)
             tables = inspector.get_table_names()
 

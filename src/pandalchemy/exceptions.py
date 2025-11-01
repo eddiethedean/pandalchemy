@@ -35,6 +35,7 @@ class SchemaError(PandalchemyError):
         - Invalid column type
         - Schema migration failure
     """
+
     pass
 
 
@@ -47,6 +48,7 @@ class TransactionError(PandalchemyError):
         - Commit failure
         - Nested transaction issues
     """
+
     pass
 
 
@@ -59,6 +61,7 @@ class DataValidationError(PandalchemyError):
         - Invalid data types
         - Constraint violations
     """
+
     pass
 
 
@@ -71,6 +74,7 @@ class ConnectionError(PandalchemyError):
         - Invalid connection string
         - Connection timeout
     """
+
     pass
 
 
@@ -83,5 +87,5 @@ class ChangeTrackingError(PandalchemyError):
         - Invalid change operation
         - Change application failure
     """
-    pass
 
+    pass

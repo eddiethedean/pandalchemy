@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pandalchemy"
-version = "1.0.0"
+version = "1.1.0"
 description = "A package that integrates pandas and sqlalchemy with change tracking and optimized SQL operations."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -66,6 +66,9 @@ addopts = [
 markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
+    "postgres: marks tests that require PostgreSQL (skip if TEST_POSTGRES_URL not set)",
+    "mysql: marks tests that require MySQL (skip if TEST_MYSQL_URL not set)",
+    "multidb: marks tests that should run on multiple database types",
 ]
 
 [tool.coverage.run]

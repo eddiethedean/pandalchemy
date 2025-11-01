@@ -29,7 +29,7 @@ def pull_table(
     table_name: str,
     schema: str | None = None,
     primary_key: str | list[str] | None = None,
-    set_index: bool = True
+    set_index: bool = True,
 ) -> pd.DataFrame:
     """
     Pull a table from the database into a DataFrame.
@@ -44,35 +44,62 @@ def pull_table(
     Returns:
         DataFrame with PK as index if set_index=True and primary_key provided
     """
-    # Use pandas read_sql_table - try with type inference first
-    try:
-        df = pd.read_sql_table(table_name, engine, schema=schema)
-    except (ValueError, TypeError):
-        # Type conversion error - retry without dtype enforcement
-        # This handles cases where column types don't match data
+    # For MySQL and PostgreSQL, use pd.read_sql directly to avoid potential hangs
+    # pd.read_sql_table uses inspect() internally which can hang after schema changes
+    dialect = engine.dialect.name
+    use_direct_sql = dialect in ("mysql", "postgresql")
+
+    if not use_direct_sql:
+        # For SQLite and others, try read_sql_table first for better type inference
+        try:
+            df = pd.read_sql_table(table_name, engine, schema=schema)
+            # Success with read_sql_table, skip to dtype inference
+        except (ValueError, TypeError):
+            use_direct_sql = True  # Fall through to direct SQL
+
+    if use_direct_sql:
+        # Use read_sql directly for MySQL/PostgreSQL to avoid inspect() hangs
+        # or as fallback for SQLite when read_sql_table fails
         try:
             # Use read_sql which is more lenient with type conversions
             # Build safe query with text() - table/schema names are from database introspection
             from sqlalchemy import text
 
-            # Build query safely
-            if schema is None:
-                query = text(f'SELECT * FROM "{table_name}"')
+            # Build query safely with database-specific quoting
+            if dialect == "mysql":
+                # MySQL uses backticks
+                if schema is None:
+                    query = text(f"SELECT * FROM `{table_name}`")
+                else:
+                    query = text(f"SELECT * FROM `{schema}`.`{table_name}`")
+            elif dialect == "postgresql":
+                # PostgreSQL uses double quotes
+                if schema is None:
+                    query = text(f'SELECT * FROM "{table_name}"')
+                else:
+                    query = text(f'SELECT * FROM "{schema}"."{table_name}"')
             else:
-                query = text(f'SELECT * FROM "{schema}"."{table_name}"')
+                # SQLite and others
+                if schema is None:
+                    query = text(f'SELECT * FROM "{table_name}"')
+                else:
+                    query = text(f'SELECT * FROM "{schema}"."{table_name}"')
             df = pd.read_sql(query, engine)
         except Exception as e:
             # If all else fails, return empty DataFrame with correct structure
             import warnings
+
             warnings.warn(
                 f"Failed to read table '{table_name}' from database, returning empty DataFrame. "
                 f"Error: {type(e).__name__}: {str(e)}",
                 UserWarning,
-                stacklevel=2
+                stacklevel=2,
             )
-            metadata = MetaData()
-            table = Table(table_name, metadata, autoload_with=engine, schema=schema)
-            df = pd.DataFrame(columns=[col.name for col in table.columns])
+            # Use inspect() instead of autoload_with to avoid potential hangs
+            # Similar to PostgreSQL, use explicit connection management
+            inspector = inspect(engine)
+            columns_info = inspector.get_columns(table_name, schema=schema)
+            df = pd.DataFrame(columns=[col["name"] for col in columns_info])
             return df
 
     # Try to infer better dtypes - convert string representations of numbers
@@ -81,10 +108,10 @@ def pull_table(
         df = df.infer_objects()
         # Convert columns that look like numbers
         for col in df.columns:
-            if df[col].dtype == 'object':
+            if df[col].dtype == "object":
                 try:
                     # Try numeric conversion, keeping NaN for non-numeric values
-                    converted = pd.to_numeric(df[col], errors='coerce')
+                    converted = pd.to_numeric(df[col], errors="coerce")
                     # Only apply if we didn't lose information (no new NaNs)
                     original_na_count = df[col].isna().sum()
                     converted_na_count = converted.isna().sum()
@@ -96,11 +123,12 @@ def pull_table(
     except Exception as e:
         # If type inference fails, use data as-is
         import warnings
+
         warnings.warn(
             f"Type inference failed for table '{table_name}', using data as-is. "
             f"Error: {type(e).__name__}: {str(e)}",
             UserWarning,
-            stacklevel=2
+            stacklevel=2,
         )
 
     # Set primary key as index if requested
@@ -117,7 +145,9 @@ def pull_table(
     return df
 
 
-def get_primary_key(engine: Engine, table_name: str, schema: str | None = None) -> str | list[str] | None:
+def get_primary_key(
+    engine: Engine, table_name: str, schema: str | None = None
+) -> str | list[str] | None:
     """
     Get the primary key column name(s) for a table.
 
@@ -131,11 +161,12 @@ def get_primary_key(engine: Engine, table_name: str, schema: str | None = None) 
         list of column names for composite PK,
         or None if no primary key exists
     """
+    # inspect(engine) manages connections internally
     inspector = inspect(engine)
     pk_constraint = inspector.get_pk_constraint(table_name, schema=schema)
 
-    if pk_constraint and pk_constraint['constrained_columns']:
-        pk_cols = pk_constraint['constrained_columns']
+    if pk_constraint and pk_constraint["constrained_columns"]:
+        pk_cols = pk_constraint["constrained_columns"]
         # Return single string for single-column PK, list for composite PK
         if len(pk_cols) == 1:
             return pk_cols[0]
@@ -150,7 +181,7 @@ def execute_plan(
     table_name: str,
     plan: ExecutionPlan,
     schema: str | None = None,
-    primary_key: str | list[str] | None = None
+    primary_key: str | list[str] | None = None,
 ) -> None:
     """
     Execute a complete execution plan with transaction management.
@@ -171,33 +202,50 @@ def execute_plan(
     if not plan.has_changes():
         return
 
-    # Execute within a transaction
-    with engine.begin() as connection:
+    # Separate schema changes from data changes
+    # Schema changes must execute OUTSIDE any transaction to avoid metadata lock conflicts
+    schema_changes = [
+        step for step in plan.steps if step.operation_type == OperationType.SCHEMA_CHANGE
+    ]
+    data_changes = [
+        step for step in plan.steps if step.operation_type != OperationType.SCHEMA_CHANGE
+    ]
+
+    # Execute schema changes first - use direct connection to ensure immediate commit
+    # This prevents PostgreSQL metadata lock conflicts
+    for step in schema_changes:
+        # Use a fresh connection outside any transaction for schema changes
+        # transmutation needs engine but we ensure it gets a clean connection
+        conn = engine.connect()
         try:
-            # Execute each step in order
-            for step in plan.steps:
-                if step.operation_type == OperationType.SCHEMA_CHANGE:
-                    # Schema changes need the engine, not connection
-                    _execute_schema_change(engine, table_name, step.data, schema)
-                elif step.operation_type == OperationType.DELETE:
-                    _execute_deletes(connection, table_name, step.data, primary_key, schema)
-                elif step.operation_type == OperationType.UPDATE:
-                    _execute_updates(connection, table_name, step.data, primary_key, schema)
-                elif step.operation_type == OperationType.INSERT:
-                    _execute_inserts(connection, table_name, step.data, schema)
-        except Exception as e:
-            # Transaction will automatically rollback on exception
-            raise TransactionError(
-                f"Failed to execute plan: {str(e)}",
-                details={'table': table_name, 'schema': schema}
-            ) from e
+            # Execute schema change - it will use engine internally but we ensure connection is clean
+            _execute_schema_change(engine, table_name, step.data, schema)
+            # Explicitly commit any operations on this connection
+            conn.commit()
+        finally:
+            conn.close()
+
+    # Execute data changes within a transaction
+    if data_changes:
+        with engine.begin() as connection:
+            try:
+                for step in data_changes:
+                    if step.operation_type == OperationType.DELETE:
+                        _execute_deletes(connection, table_name, step.data, primary_key, schema)
+                    elif step.operation_type == OperationType.UPDATE:
+                        _execute_updates(connection, table_name, step.data, primary_key, schema)
+                    elif step.operation_type == OperationType.INSERT:
+                        _execute_inserts(connection, table_name, step.data, schema)
+            except Exception as e:
+                # Transaction will automatically rollback on exception
+                raise TransactionError(
+                    f"Failed to execute plan: {str(e)}",
+                    details={"table": table_name, "schema": schema},
+                ) from e
 
 
 def _execute_schema_change(
-    engine: Engine,
-    table_name: str,
-    schema_change: SchemaChange,
-    schema: str | None = None
+    engine: Engine, table_name: str, schema_change: SchemaChange, schema: str | None = None
 ) -> None:
     """
     Execute a schema change operation.
@@ -208,41 +256,163 @@ def _execute_schema_change(
         schema_change: The schema change to apply
         schema: Optional schema name
     """
-    # Note: transmutation API - uses different parameter names than expected
-    if schema_change.change_type == 'add_column':
-        tm.add_column(
-            table_name=table_name,
-            column_name=schema_change.column_name,
-            dtype=_pandas_dtype_to_python_type(schema_change.column_type),
-            engine=engine,
-            schema=schema
-        )
-    elif schema_change.change_type == 'drop_column':
-        tm.drop_column(
-            engine=engine,
-            table_name=table_name,
-            col_name=schema_change.column_name,
-            schema=schema
-        )
-    elif schema_change.change_type == 'rename_column':
+    from sqlalchemy import text
+
+    # For PostgreSQL and MySQL, use raw SQL to avoid issues:
+    # - PostgreSQL: transmutation's inspect() can hang due to metadata locks
+    # - MySQL: transmutation doesn't handle VARCHAR length requirement and rename_column requires type
+    # This bypasses these issues by using direct SQL
+    if engine.dialect.name in ("postgresql", "mysql") and schema_change.change_type == "add_column":
+        column_type = _pandas_dtype_to_python_type(schema_change.column_type)
+
+        # Map pandas/SQLAlchemy types to database-specific types
+        is_mysql = engine.dialect.name == "mysql"
+        if is_mysql:
+            type_map = {
+                "Integer": "INTEGER",
+                "Float": "REAL",
+                "Double": "DOUBLE",
+                "Boolean": "BOOLEAN",
+                "String": "VARCHAR(255)",  # MySQL requires VARCHAR length
+                "Text": "TEXT",
+            }
+        else:  # PostgreSQL
+            type_map = {
+                "Integer": "INTEGER",
+                "Float": "REAL",
+                "Double": "DOUBLE PRECISION",
+                "Boolean": "BOOLEAN",
+                "String": "VARCHAR",
+                "Text": "TEXT",
+            }
+        sql_type = type_map.get(column_type.__name__, "VARCHAR(255)" if is_mysql else "VARCHAR")
+
+        # Build ALTER TABLE statement with database-specific quoting
+        if is_mysql:
+            schema_prefix = f"`{schema}`." if schema else ""
+            alter_sql = f"ALTER TABLE {schema_prefix}`{table_name}` ADD COLUMN `{schema_change.column_name}` {sql_type}"
+        else:  # PostgreSQL
+            schema_prefix = f'"{schema}".' if schema else ""
+            alter_sql = f'ALTER TABLE {schema_prefix}"{table_name}" ADD COLUMN "{schema_change.column_name}" {sql_type}'
+
+        # Execute with fresh connection outside any transaction
+        # This ensures the schema change commits immediately, avoiding lock conflicts
+        conn = engine.connect()
+        try:
+            conn.execute(text(alter_sql))
+            conn.commit()
+        finally:
+            conn.close()
+        return
+
+    # For MySQL rename_column, use raw SQL with existing column type
+    # MySQL's CHANGE COLUMN requires the existing column type
+    if engine.dialect.name == "mysql" and schema_change.change_type == "rename_column":
         if schema_change.new_column_name is None:
             raise ValueError("new_column_name is required for rename_column operation")
-        tm.rename_column(
-            engine=engine,
-            table_name=table_name,
-            old_col_name=schema_change.column_name,
-            new_col_name=schema_change.new_column_name,
-            schema=schema
+
+        # Get existing column type from database
+        inspector = inspect(engine)
+        columns_info = inspector.get_columns(table_name, schema=schema)
+        column_info = next(
+            (col for col in columns_info if col["name"] == schema_change.column_name), None
         )
-    elif schema_change.change_type == 'alter_column_type':
-        # Use transmutation's alter_column with type_ parameter
-        tm.alter_column(
-            table_name=table_name,
-            column_name=schema_change.column_name,
-            engine=engine,
-            schema=schema,
-            type_=_pandas_dtype_to_python_type(schema_change.new_column_type)
-        )
+
+        if column_info is None:
+            raise ValueError(
+                f"Column '{schema_change.column_name}' not found in table '{table_name}'"
+            )
+
+        # Convert SQLAlchemy type to MySQL type string
+        existing_type = column_info["type"]
+        type_str = str(existing_type)
+
+        # MySQL uses backticks for identifiers
+        schema_prefix = f"`{schema}`." if schema else ""
+        alter_sql = f"ALTER TABLE {schema_prefix}`{table_name}` CHANGE COLUMN `{schema_change.column_name}` `{schema_change.new_column_name}` {type_str}"
+
+        # Execute with fresh connection outside any transaction
+        conn = engine.connect()
+        try:
+            conn.execute(text(alter_sql))
+            conn.commit()
+        finally:
+            conn.close()
+        return
+
+    # For PostgreSQL rename_column, use RENAME COLUMN (doesn't require type)
+    if engine.dialect.name == "postgresql" and schema_change.change_type == "rename_column":
+        if schema_change.new_column_name is None:
+            raise ValueError("new_column_name is required for rename_column operation")
+
+        # PostgreSQL uses double quotes for identifiers
+        schema_prefix = f'"{schema}".' if schema else ""
+        alter_sql = f'ALTER TABLE {schema_prefix}"{table_name}" RENAME COLUMN "{schema_change.column_name}" TO "{schema_change.new_column_name}"'
+
+        # Execute with fresh connection outside any transaction
+        conn = engine.connect()
+        try:
+            conn.execute(text(alter_sql))
+            conn.commit()
+        finally:
+            conn.close()
+        return
+
+    # Use transmutation for other databases or change types
+    # Wrap transmutation calls to convert ValidationError to TransactionError
+    try:
+        if schema_change.change_type == "add_column":
+            tm.add_column(
+                table_name=table_name,
+                column_name=schema_change.column_name,
+                dtype=_pandas_dtype_to_python_type(schema_change.column_type),
+                engine=engine,
+                schema=schema,
+            )
+        elif schema_change.change_type == "drop_column":
+            tm.drop_column(
+                engine=engine,
+                table_name=table_name,
+                col_name=schema_change.column_name,
+                schema=schema,
+            )
+        elif schema_change.change_type == "rename_column":
+            if schema_change.new_column_name is None:
+                raise ValueError("new_column_name is required for rename_column operation")
+            tm.rename_column(
+                engine=engine,
+                table_name=table_name,
+                old_col_name=schema_change.column_name,
+                new_col_name=schema_change.new_column_name,
+                schema=schema,
+            )
+        elif schema_change.change_type == "alter_column_type":
+            # Use transmutation's alter_column with type_ parameter
+            tm.alter_column(
+                table_name=table_name,
+                column_name=schema_change.column_name,
+                engine=engine,
+                schema=schema,
+                type_=_pandas_dtype_to_python_type(schema_change.new_column_type),
+            )
+    except Exception as e:
+        # Convert transmutation ValidationError and other errors to TransactionError
+        # This ensures consistent error handling across all schema operations
+        if (
+            "ValidationError" in type(e).__name__
+            or "Column" in str(e)
+            and ("does not exist" in str(e) or "not found" in str(e))
+        ):
+            raise TransactionError(
+                f"Schema change failed: {str(e)}",
+                details={
+                    "table": table_name,
+                    "schema": schema,
+                    "change_type": schema_change.change_type,
+                },
+            ) from e
+        # Re-raise other exceptions as-is
+        raise
 
 
 def _execute_deletes(
@@ -250,7 +420,7 @@ def _execute_deletes(
     table_name: str,
     delete_keys: list[Any],
     primary_key: str | list[str] | None,
-    schema: str | None = None
+    schema: str | None = None,
 ) -> None:
     """
     Execute delete operations.
@@ -268,34 +438,42 @@ def _execute_deletes(
     # Convert numpy types to Python native types
     clean_keys = [convert_numpy_types(key) for key in delete_keys]
 
-    # Use SQLAlchemy Table for delete operations
-    metadata = MetaData()
-    table = Table(table_name, metadata, autoload_with=connection, schema=schema)
+    # Build a minimal Table object with just the primary key column(s)
+    # We know the primary key name(s) from the parameter, so we don't need inspect
+    # Use Integer as a generic type - SQLAlchemy will handle the actual comparison
+    from sqlalchemy import Column, Integer
 
-    # Handle single vs composite primary keys
+    metadata = MetaData()
+
     if isinstance(primary_key, str):
         # Single column PK
-        stmt = table.delete().where(table.c[primary_key].in_(clean_keys))
+        pk_col = Column(primary_key, Integer)
+        table = Table(table_name, metadata, pk_col, schema=schema)
+        # Execute DELETE using individual WHERE clauses for each key
+        # This ensures each delete executes correctly
+        for key in clean_keys:
+            stmt = table.delete().where(table.c[primary_key] == key)
+            result = connection.execute(stmt)
+            # Check if delete actually worked
+            if result.rowcount == 0:
+                # Row might not exist - log but continue
+                import warnings
+
+                warnings.warn(
+                    f"DELETE statement for {primary_key}={key} affected 0 rows", stacklevel=3
+                )
     else:
-        # Composite PK - need to match on all columns
-        from sqlalchemy import and_, or_
+        # Composite PK - build table with all PK columns
+        pk_cols = [Column(pk_name, Integer) for pk_name in primary_key]
+        table = Table(table_name, metadata, *pk_cols, schema=schema)
+        # Execute individual deletes for each composite key
+        from sqlalchemy import and_
 
-        conditions = []
         for key_value in clean_keys:
-            if isinstance(key_value, (tuple, list)):
-                # Match all PK columns
-                condition = and_(*[
-                    table.c[pk_col] == val
-                    for pk_col, val in zip(primary_key, key_value)
-                ])
-                conditions.append(condition)
-
-        if conditions:
-            stmt = table.delete().where(or_(*conditions))
-        else:
-            return
-
-    connection.execute(stmt)
+            if isinstance(key_value, (tuple, list)) and len(key_value) == len(primary_key):
+                conditions = [table.c[pk_col] == val for pk_col, val in zip(primary_key, key_value)]
+                stmt = table.delete().where(and_(*conditions))
+                connection.execute(stmt)
 
 
 def _execute_updates(
@@ -303,7 +481,7 @@ def _execute_updates(
     table_name: str,
     update_records: list[dict[str, Any]],
     primary_key: str | list[str] | None,
-    schema: str | None = None
+    schema: str | None = None,
 ) -> None:
     """
     Execute update operations.
@@ -318,9 +496,10 @@ def _execute_updates(
     if not update_records or not primary_key:
         return
 
-    # Use SQLAlchemy Table for update operations
-    metadata = MetaData()
-    table = Table(table_name, metadata, autoload_with=connection, schema=schema)
+    # Use autoload_with to load table structure from the existing connection
+    # This ensures we see the current transaction state, including any schema changes
+    # Note: autoload_with uses the connection's transaction context
+    table = Table(table_name, MetaData(), autoload_with=connection, schema=schema)
 
     # Handle single vs composite primary keys
     if isinstance(primary_key, str):
@@ -339,9 +518,7 @@ def _execute_updates(
 
             # Separate primary key from update values
             update_values = {
-                k: convert_numpy_types(v)
-                for k, v in record.items()
-                if k != pk_cols[0]
+                k: convert_numpy_types(v) for k, v in record.items() if k != pk_cols[0]
             }
 
             # Build UPDATE statement
@@ -367,9 +544,7 @@ def _execute_updates(
 
             # Separate PK from update values
             update_values = {
-                k: convert_numpy_types(v)
-                for k, v in record.items()
-                if k not in pk_cols
+                k: convert_numpy_types(v) for k, v in record.items() if k not in pk_cols
             }
 
             # Build UPDATE statement
@@ -382,7 +557,7 @@ def _execute_inserts(
     connection: Any,
     table_name: str,
     insert_records: list[dict[str, Any]],
-    schema: str | None = None
+    schema: str | None = None,
 ) -> None:
     """
     Execute insert operations.
@@ -399,9 +574,33 @@ def _execute_inserts(
     # Convert numpy types to Python native types in records
     clean_records = convert_records_list(insert_records)
 
-    # Use pandas DataFrame to_sql for inserts
-    df = pd.DataFrame(clean_records)
-    df.to_sql(table_name, connection, schema=schema, if_exists='append', index=False)
+    if not clean_records:
+        return
+
+    # Use raw SQLAlchemy insert instead of pandas to_sql to avoid connection issues
+    # This is especially important for MySQL and PostgreSQL which can have connection
+    # management conflicts with pandas' internal connection handling
+    from sqlalchemy import insert
+
+    # Use inspect to get table structure without autoload_with which can hang
+    # Similar to PostgreSQL fix - inspect(engine) manages connections safely
+    inspector = inspect(connection.engine)
+    columns_info = inspector.get_columns(table_name, schema=schema)
+
+    # Build table structure from column info
+    from sqlalchemy import Column
+
+    metadata = MetaData()
+    columns = []
+    for col_info in columns_info:
+        col_name = col_info["name"]
+        col_type = col_info["type"]
+        columns.append(Column(col_name, col_type))
+
+    table = Table(table_name, metadata, *columns, schema=schema)
+
+    # Execute inserts in batch
+    connection.execute(insert(table), clean_records)
 
 
 def _pandas_dtype_to_python_type(dtype: Any) -> type:
@@ -425,7 +624,7 @@ def create_table_from_dataframe(
     df: pd.DataFrame,
     primary_key: str | list[str],
     schema: str | None,
-    if_exists: str = 'fail'
+    if_exists: str = "fail",
 ) -> None:
     """
     Create a new table from a DataFrame.
@@ -467,16 +666,36 @@ def create_table_from_dataframe(
 
     # Map pandas dtypes to SQLAlchemy types
     columns: list[Column] = []
+    # MySQL requires VARCHAR length - use a reasonable default
+    is_mysql = engine.dialect.name == "mysql"
+    string_length = 255 if is_mysql else None
+
     for col_name in df_to_write.columns:
         dtype = df_to_write[col_name].dtype
-        if 'int' in str(dtype):
-            col_type: type = Integer
-        elif 'float' in str(dtype):
+
+        # For empty DataFrames, default to String to avoid type inference issues
+        # Empty DataFrames have object dtype, but we don't know what type will be inserted
+        # Type annotation allows both type classes and instances (String vs String(length))
+        col_type: type[Any] | Any
+        if df_to_write.empty:
+            col_type = String(string_length) if is_mysql else String
+        elif "int" in str(dtype):
+            col_type = Integer
+        elif "float" in str(dtype):
             col_type = Float
-        elif 'bool' in str(dtype):
+        elif "bool" in str(dtype):
             col_type = Boolean
+        elif "datetime" in str(dtype):
+            # DateTime columns - use String for SQLite, DateTime for others
+            if engine.dialect.name == "sqlite":
+                col_type = String(string_length) if is_mysql else String
+            else:
+                from sqlalchemy import DateTime
+
+                col_type = DateTime
         else:
-            col_type = String
+            # MySQL requires explicit VARCHAR length, others can be None
+            col_type = String(string_length) if is_mysql else String
         columns.append(Column(col_name, col_type))
 
     # Add primary key constraint
@@ -484,23 +703,26 @@ def create_table_from_dataframe(
         table_name,
         metadata,
         *columns,
-        PrimaryKeyConstraint(*pk_cols, name=f'{table_name}_pk'),
-        schema=schema_normalized
-    )
-
-    # Create the table
-    if if_exists == 'replace':
-        table_obj.drop(engine, checkfirst=True)
-    metadata.create_all(engine)
-
-    # Insert data
-    df_to_write.to_sql(
-        table_name,
-        engine,
+        PrimaryKeyConstraint(*pk_cols, name=f"{table_name}_pk"),
         schema=schema_normalized,
-        if_exists='append',
-        index=False
     )
+
+    # Create the table and insert data in explicit transaction
+    # This ensures everything commits before any subsequent operations
+    with engine.begin() as conn:
+        # Create the table structure
+        if if_exists == "replace":
+            table_obj.drop(bind=conn, checkfirst=True)
+        metadata.create_all(bind=conn)
+
+        # Insert data - use raw SQL to avoid pandas to_sql connection issues
+        if not df_to_write.empty:
+            from sqlalchemy import insert
+
+            table_ref = table_obj
+            # Convert records to ensure Timestamp objects are converted for SQLite
+            records = convert_records_list(df_to_write.to_dict("records"))
+            conn.execute(insert(table_ref), records)
 
 
 def table_exists(engine: Engine, table_name: str, schema: str | None = None) -> bool:
@@ -515,6 +737,6 @@ def table_exists(engine: Engine, table_name: str, schema: str | None = None) -> 
     Returns:
         True if table exists, False otherwise
     """
+    # inspect(engine) manages connections internally
     inspector = inspect(engine)
     return table_name in inspector.get_table_names(schema=schema)
-

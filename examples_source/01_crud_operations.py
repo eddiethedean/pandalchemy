@@ -10,6 +10,7 @@
 # %%
 import pandas as pd
 from sqlalchemy import create_engine
+
 import pandalchemy as pa
 
 # %% [markdown]
@@ -17,17 +18,16 @@ import pandalchemy as pa
 # Create a database and initial table with auto-increment
 
 # %%
-engine = create_engine('sqlite:///:memory:')
+engine = create_engine("sqlite:///:memory:")
 db = pa.DataBase(engine)
 
 # Create initial table
-initial_data = pd.DataFrame({
-    'name': ['Alice', 'Bob'],
-    'email': ['alice@example.com', 'bob@example.com'],
-    'age': [25, 30]
-}, index=[1, 2])
+initial_data = pd.DataFrame(
+    {"name": ["Alice", "Bob"], "email": ["alice@example.com", "bob@example.com"], "age": [25, 30]},
+    index=[1, 2],
+)
 
-users = pa.TableDataFrame('users', initial_data, 'id', engine, auto_increment=True)
+users = pa.TableDataFrame("users", initial_data, "id", engine, auto_increment=True)
 users.push()
 
 users.to_pandas()
@@ -39,7 +39,7 @@ users.to_pandas()
 # ### Add single row with auto-increment
 
 # %%
-users.add_row({'name': 'Charlie', 'email': 'charlie@example.com', 'age': 35}, auto_increment=True)
+users.add_row({"name": "Charlie", "email": "charlie@example.com", "age": 35}, auto_increment=True)
 print("✓ Added Charlie (ID will be auto-generated)")
 
 # %% [markdown]
@@ -47,9 +47,9 @@ print("✓ Added Charlie (ID will be auto-generated)")
 
 # %%
 new_users = [
-    {'name': 'Diana', 'email': 'diana@example.com', 'age': 28},
-    {'name': 'Eve', 'email': 'eve@example.com', 'age': 32},
-    {'name': 'Frank', 'email': 'frank@example.com', 'age': 45}
+    {"name": "Diana", "email": "diana@example.com", "age": 28},
+    {"name": "Eve", "email": "eve@example.com", "age": 32},
+    {"name": "Frank", "email": "frank@example.com", "age": 45},
 ]
 
 for user in new_users:
@@ -83,15 +83,15 @@ print(f"User 999 exists: {users.row_exists(999)}")
 # %%
 df = users.to_pandas()
 print(f"Total rows: {len(df)}, Columns: {list(df.columns)}")
-df
+df  # noqa: B018
 
 # %% [markdown]
 # ### Filter data using pandas
 
 # %%
-seniors = users._data[users._data['age'] > 30]
+seniors = users._data[users._data["age"] > 30]
 print(f"Users over 30: {len(seniors)}")
-seniors[['name', 'age']]
+seniors[["name", "age"]]
 
 # %% [markdown]
 # ## 3. UPDATE Operations
@@ -100,14 +100,14 @@ seniors[['name', 'age']]
 # ### Update single field
 
 # %%
-users.update_row(1, {'age': 26})
+users.update_row(1, {"age": 26})
 print("✓ Updated Alice's age to 26")
 
 # %% [markdown]
 # ### Update multiple fields
 
 # %%
-users.update_row(2, {'email': 'robert@example.com', 'age': 31})
+users.update_row(2, {"email": "robert@example.com", "age": 31})
 print("✓ Updated Bob's email and age")
 
 # %% [markdown]
@@ -115,11 +115,11 @@ print("✓ Updated Bob's email and age")
 
 # %%
 # Update existing
-users.upsert_row({'id': 2, 'name': 'Robert', 'email': 'robert@example.com', 'age': 31})
+users.upsert_row({"id": 2, "name": "Robert", "email": "robert@example.com", "age": 31})
 print("✓ Upserted user 2 (updated existing)")
 
 # Insert new
-users.upsert_row({'id': 100, 'name': 'Grace', 'email': 'grace@example.com', 'age': 29})
+users.upsert_row({"id": 100, "name": "Grace", "email": "grace@example.com", "age": 29})
 print("✓ Upserted user 100 (created new)")
 
 users.push()
@@ -146,11 +146,11 @@ users.to_pandas()
 
 # %%
 # Update via pandas .loc and .at
-users._data.loc[1, 'email'] = 'alice.updated@example.com'
-users._data.at[2, 'age'] = 32
+users._data.loc[1, "email"] = "alice.updated@example.com"
+users._data.at[2, "age"] = 32
 
 # Add column via pandas
-users._data['verified'] = [True, False, True, False]
+users._data["verified"] = [True, False, True, False]
 
 users.push()
 users.to_pandas()
@@ -161,14 +161,15 @@ users.to_pandas()
 # %%
 # Try to update non-existent row
 try:
-    users.update_row(999, {'age': 100})
+    users.update_row(999, {"age": 100})
 except Exception as e:
     print(f"✓ Correctly raised: {type(e).__name__}")
 
 # Try to update primary key (immutable)
-from pandalchemy.exceptions import DataValidationError
+from pandalchemy.exceptions import DataValidationError  # noqa: E402
+
 try:
-    users.update_row(1, {'id': 999})
+    users.update_row(1, {"id": 999})
 except DataValidationError:
     print("✓ Correctly prevented: Primary keys are immutable")
 
@@ -182,4 +183,3 @@ except DataValidationError:
 # - `delete_row()` for deletions
 # - All pandas DataFrame operations work and are automatically tracked
 # - Primary keys are immutable (stored as DataFrame index)
-

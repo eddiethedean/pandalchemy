@@ -18,6 +18,7 @@ from pandalchemy.change_tracker import ChangeTracker
 
 class OperationType(Enum):
     """Types of SQL operations in the execution plan."""
+
     SCHEMA_CHANGE = "schema_change"
     INSERT = "insert"
     UPDATE = "update"
@@ -35,6 +36,7 @@ class PlanStep:
         data: Data needed to execute the operation
         priority: Priority order (lower executes first)
     """
+
     operation_type: OperationType
     description: str
     data: Any
@@ -48,6 +50,7 @@ class PlanStep:
 @dataclass
 class SchemaChange:
     """Represents a schema modification."""
+
     change_type: str  # 'add_column', 'drop_column', 'rename_column', 'alter_column_type'
     column_name: str
     new_column_name: str | None = None
@@ -106,15 +109,13 @@ class ExecutionPlan:
         # Handle column renames first
         for old_name, new_name in self.tracker.renamed_columns.items():
             schema_change = SchemaChange(
-                change_type='rename_column',
-                column_name=old_name,
-                new_column_name=new_name
+                change_type="rename_column", column_name=old_name, new_column_name=new_name
             )
             step = PlanStep(
                 operation_type=OperationType.SCHEMA_CHANGE,
                 description=f"Rename column '{old_name}' to '{new_name}'",
                 data=schema_change,
-                priority=1
+                priority=1,
             )
             self.steps.append(step)
 
@@ -122,15 +123,12 @@ class ExecutionPlan:
         for col_name in self.tracker.dropped_columns:
             # Don't drop if it was renamed
             if col_name not in self.tracker.renamed_columns:
-                schema_change = SchemaChange(
-                    change_type='drop_column',
-                    column_name=col_name
-                )
+                schema_change = SchemaChange(change_type="drop_column", column_name=col_name)
                 step = PlanStep(
                     operation_type=OperationType.SCHEMA_CHANGE,
                     description=f"Drop column '{col_name}'",
                     data=schema_change,
-                    priority=2
+                    priority=2,
                 )
                 self.steps.append(step)
 
@@ -143,30 +141,26 @@ class ExecutionPlan:
                 col_type = None
 
             schema_change = SchemaChange(
-                change_type='add_column',
-                column_name=col_name,
-                column_type=col_type
+                change_type="add_column", column_name=col_name, column_type=col_type
             )
             step = PlanStep(
                 operation_type=OperationType.SCHEMA_CHANGE,
                 description=f"Add column '{col_name}'",
                 data=schema_change,
-                priority=3
+                priority=3,
             )
             self.steps.append(step)
 
         # Handle column type changes
         for col_name, new_type in self.tracker.altered_column_types.items():
             schema_change = SchemaChange(
-                change_type='alter_column_type',
-                column_name=col_name,
-                new_column_type=new_type
+                change_type="alter_column_type", column_name=col_name, new_column_type=new_type
             )
             step = PlanStep(
                 operation_type=OperationType.SCHEMA_CHANGE,
                 description=f"Alter column '{col_name}' type to {new_type.__name__}",
                 data=schema_change,
-                priority=4
+                priority=4,
             )
             self.steps.append(step)
 
@@ -181,7 +175,7 @@ class ExecutionPlan:
                 operation_type=OperationType.DELETE,
                 description=f"Delete {len(deletes)} row(s)",
                 data=delete_keys,
-                priority=10
+                priority=10,
             )
             self.steps.append(step)
 
@@ -240,7 +234,7 @@ class ExecutionPlan:
                 operation_type=OperationType.UPDATE,
                 description=f"Update {len(update_records)} row(s)",
                 data=update_records,
-                priority=20
+                priority=20,
             )
             self.steps.append(step)
 
@@ -266,7 +260,7 @@ class ExecutionPlan:
                 operation_type=OperationType.INSERT,
                 description=f"Insert {len(inserts)} row(s)",
                 data=insert_records,
-                priority=30
+                priority=30,
             )
             self.steps.append(step)
 
@@ -286,21 +280,19 @@ class ExecutionPlan:
         Returns:
             Dictionary containing plan statistics
         """
-        schema_changes = sum(1 for s in self.steps
-                           if s.operation_type == OperationType.SCHEMA_CHANGE)
-        inserts = sum(1 for s in self.steps
-                     if s.operation_type == OperationType.INSERT)
-        updates = sum(1 for s in self.steps
-                     if s.operation_type == OperationType.UPDATE)
-        deletes = sum(1 for s in self.steps
-                     if s.operation_type == OperationType.DELETE)
+        schema_changes = sum(
+            1 for s in self.steps if s.operation_type == OperationType.SCHEMA_CHANGE
+        )
+        inserts = sum(1 for s in self.steps if s.operation_type == OperationType.INSERT)
+        updates = sum(1 for s in self.steps if s.operation_type == OperationType.UPDATE)
+        deletes = sum(1 for s in self.steps if s.operation_type == OperationType.DELETE)
 
         return {
             "total_steps": len(self.steps),
             "schema_changes": schema_changes,
             "insert_operations": inserts,
             "update_operations": updates,
-            "delete_operations": deletes
+            "delete_operations": deletes,
         }
 
     def get_steps_by_type(self, operation_type: OperationType) -> list[PlanStep]:
@@ -325,4 +317,3 @@ class ExecutionPlan:
     def __str__(self) -> str:
         """Return string representation of the plan."""
         return self.__repr__()
-

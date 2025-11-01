@@ -1,16 +1,9 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
-from __future__ import absolute_import
-from __future__ import print_function
-from __future__ import unicode_literals
 
 import os
 import subprocess
 import sys
-from os.path import abspath
-from os.path import dirname
-from os.path import exists
-from os.path import join
+from os.path import abspath, dirname, exists, join
 
 base_path = dirname(dirname(abspath(__file__)))
 
@@ -29,7 +22,7 @@ def exec_in_env():
     if not exists(env_path):
         import subprocess
 
-        print("Making bootstrap env in: {0} ...".format(env_path))
+        print(f"Making bootstrap env in: {env_path} ...")
         try:
             check_call([sys.executable, "-m", "venv", env_path])
         except subprocess.CalledProcessError:
@@ -41,9 +34,9 @@ def exec_in_env():
         check_call([join(bin_path, "pip"), "install", "jinja2", "tox", "matrix"])
     python_executable = join(bin_path, "python")
     if not os.path.exists(python_executable):
-        python_executable += '.exe'
+        python_executable += ".exe"
 
-    print("Re-executing with: {0}".format(python_executable))
+    print(f"Re-executing with: {python_executable}")
     print("+ exec", python_executable, __file__, "--no-env")
     os.execv(python_executable, [python_executable, __file__, "--no-env"])
 
@@ -52,17 +45,17 @@ def main():
     import jinja2
     import matrix
 
-    print("Project path: {0}".format(base_path))
+    print(f"Project path: {base_path}")
 
     jinja = jinja2.Environment(
         loader=jinja2.FileSystemLoader(join(base_path, "ci", "templates")),
         trim_blocks=True,
         lstrip_blocks=True,
-        keep_trailing_newline=True
+        keep_trailing_newline=True,
     )
 
     tox_environments = {}
-    for (alias, conf) in matrix.from_file(join(base_path, "setup.cfg")).items():
+    for alias, conf in matrix.from_file(join(base_path, "setup.cfg")).items():
         deps = conf["dependencies"]
         tox_environments[alias] = {
             "deps": deps.split(),
@@ -77,7 +70,7 @@ def main():
     for name in os.listdir(join("ci", "templates")):
         with open(join(base_path, name), "w") as fh:
             fh.write(jinja.get_template(name).render(tox_environments=tox_environments))
-        print("Wrote {}".format(name))
+        print(f"Wrote {name}")
     print("DONE.")
 
 
@@ -88,5 +81,5 @@ if __name__ == "__main__":
     elif not args:
         exec_in_env()
     else:
-        print("Unexpected arguments {0}".format(args), file=sys.stderr)
+        print(f"Unexpected arguments {args}", file=sys.stderr)
         sys.exit(1)

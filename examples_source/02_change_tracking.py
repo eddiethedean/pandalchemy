@@ -10,6 +10,7 @@
 # %%
 import pandas as pd
 from sqlalchemy import create_engine
+
 import pandalchemy as pa
 
 # %% [markdown]
@@ -17,16 +18,19 @@ import pandalchemy as pa
 # Create a database with an employees table
 
 # %%
-engine = create_engine('sqlite:///:memory:')
+engine = create_engine("sqlite:///:memory:")
 db = pa.DataBase(engine)
 
-initial_data = pd.DataFrame({
-    'name': ['Alice', 'Bob', 'Charlie'],
-    'department': ['Engineering', 'Sales', 'Engineering'],
-    'salary': [80000, 60000, 75000]
-}, index=[1, 2, 3])
+initial_data = pd.DataFrame(
+    {
+        "name": ["Alice", "Bob", "Charlie"],
+        "department": ["Engineering", "Sales", "Engineering"],
+        "salary": [80000, 60000, 75000],
+    },
+    index=[1, 2, 3],
+)
 
-employees = pa.TableDataFrame('employees', initial_data, 'id', engine)
+employees = pa.TableDataFrame("employees", initial_data, "id", engine)
 employees.push()
 
 print("Initial state:")
@@ -46,16 +50,16 @@ print(f"Has changes: {employees.has_changes()}")
 # ### Add new employees (inserts)
 
 # %%
-employees.add_row({'id': 4, 'name': 'Diana', 'department': 'Marketing', 'salary': 70000})
-employees.add_row({'id': 5, 'name': 'Eve', 'department': 'Engineering', 'salary': 85000})
+employees.add_row({"id": 4, "name": "Diana", "department": "Marketing", "salary": 70000})
+employees.add_row({"id": 5, "name": "Eve", "department": "Engineering", "salary": 85000})
 print("✓ Added Diana and Eve")
 
 # %% [markdown]
 # ### Give raises (updates)
 
 # %%
-employees.update_row(1, {'salary': 85000})
-employees.update_row(3, {'salary': 80000})
+employees.update_row(1, {"salary": 85000})
+employees.update_row(3, {"salary": 80000})
 print("✓ Updated Alice and Charlie's salaries")
 
 # %% [markdown]
@@ -69,7 +73,7 @@ print("✓ Deleted Bob")
 # ### Department reorganization (bulk update via pandas)
 
 # %%
-employees._data.loc[employees._data['department'] == 'Engineering', 'department'] = 'Product'
+employees._data.loc[employees._data["department"] == "Engineering", "department"] = "Product"
 print("✓ Renamed Engineering to Product department")
 
 # %% [markdown]
@@ -138,7 +142,7 @@ employees.to_pandas()
 # ### Add another employee
 
 # %%
-employees.add_row({'id': 6, 'name': 'Frank', 'department': 'Sales', 'salary': 65000})
+employees.add_row({"id": 6, "name": "Frank", "department": "Sales", "salary": 65000})
 print("✓ Added Frank")
 
 # %% [markdown]
@@ -146,10 +150,7 @@ print("✓ Added Frank")
 
 # %%
 # Give raises to Product department
-employees.update_where(
-    employees._data['department'] == 'Product',
-    {'salary': lambda x: x + 5000}
-)
+employees.update_where(employees._data["department"] == "Product", {"salary": lambda x: x + 5000})
 print("✓ Gave raises to Product department")
 
 # %% [markdown]
@@ -186,8 +187,8 @@ print(f"Change summary: {employees.get_changes_summary()}")
 # ### Make new changes
 
 # %%
-employees.update_row(1, {'salary': 90000})
-print(f"\nAfter new change:")
+employees.update_row(1, {"salary": 90000})
+print("\nAfter new change:")
 print(f"  Has changes: {employees.has_changes()}")
 print(f"  Changes: {employees.get_changes_summary()}")
 
@@ -196,8 +197,8 @@ print(f"  Changes: {employees.get_changes_summary()}")
 
 # %%
 # Make multiple operations
-employees.update_row(4, {'department': 'Sales'})
-employees.update_row(5, {'salary': 88000})
+employees.update_row(4, {"department": "Sales"})
+employees.update_row(5, {"salary": 88000})
 employees.delete_row(6)
 
 tracker = employees.get_tracker()
@@ -227,4 +228,3 @@ employees.push()
 # - Tracker is reset after `push()` or `pull()`
 # - Access detailed change information via `get_tracker()`
 # - Changes are organized by type: inserts, updates, deletes, schema changes
-

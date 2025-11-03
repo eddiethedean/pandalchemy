@@ -4,7 +4,7 @@
 
 Work with database tables as pandas DataFrames while pandalchemy automatically tracks changes and syncs to your database with optimized SQL operations.
 
-[![Tests](https://img.shields.io/badge/tests-534%20passing-brightgreen)](https://github.com/eddiethedean/pandalchemy)
+[![Tests](https://img.shields.io/badge/tests-453%20passing-brightgreen)](https://github.com/eddiethedean/pandalchemy)
 [![Type Checked](https://img.shields.io/badge/mypy-passing-blue)](https://github.com/eddiethedean/pandalchemy)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org)
 
@@ -530,7 +530,16 @@ Built with:
 
 ## Version History
 
-### 1.1.0 (Latest) 🎉
+### 1.2.0 (Latest) 🎉
+- **Dependency Upgrades**: Upgraded to fullmetalalchemy 2.4.0 and transmutation 1.1.0 for improved SQL operations and schema evolution
+- **Code Modernization**: Replaced all SQLAlchemy Core API usage with fullmetalalchemy functions for consistency and better abstraction
+- **Type Safety**: Added fast type checking with `ty` (Rust-based type checker) and fixed all type issues for better code quality
+- **Improved Schema Operations**: Leveraged transmutation 1.1.0 features including improved column operations, better transaction handling, and MySQL VARCHAR length support
+- **Performance**: Optimized MAX aggregation queries using fullmetalalchemy's `select_column_max` for efficient primary key generation
+- **Code Quality**: Full ruff formatting and linting compliance, improved type annotations throughout the codebase
+- **Testing**: 453 tests passing with improved test coverage and reliability
+
+### 1.1.0
 - **Multi-Database Support**: Full PostgreSQL and MySQL compatibility with 534 tests, 150+ running on multiple databases
 - **Database-Specific Optimizations**: Raw SQL paths for PostgreSQL/MySQL to avoid metadata lock issues
 - **Schema Evolution Improvements**: Proper handling of MySQL VARCHAR length requirements and column rename operations

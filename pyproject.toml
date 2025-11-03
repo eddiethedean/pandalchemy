@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pandalchemy"
-version = "1.1.0"
+version = "1.2.0"
 description = "A package that integrates pandas and sqlalchemy with change tracking and optimized SQL operations."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -28,8 +28,8 @@ classifiers = [
 dependencies = [
     "pandas>=1.5.0",
     "sqlalchemy>=2.0.0",
-    "fullmetalalchemy>=0.1.0",
-    "transmutation>=0.1.0",
+    "fullmetalalchemy>=2.4.0",
+    "transmutation>=1.1.0",
     "numpy>=1.20.0",
     "tabulate>=0.8.0"
 ]

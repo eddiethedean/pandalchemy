@@ -8,6 +8,8 @@ Contents
    readme
    installation
    usage
+   troubleshooting
+   performance
    reference/index
    contributing
    authors

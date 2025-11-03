@@ -23,6 +23,70 @@ from pandalchemy.utils import (
     pandas_dtype_to_python_type,
 )
 
+# Adaptive batch size configuration
+# These values can be adjusted based on database type and connection performance
+DEFAULT_BATCH_SIZE_INSERT = 1000  # Insert batch size
+DEFAULT_BATCH_SIZE_UPDATE = 500   # Update batch size (smaller due to WHERE clauses)
+DEFAULT_BATCH_SIZE_DELETE = 1000  # Delete batch size
+
+
+def _calculate_batch_size(operation_type: OperationType, record_count: int) -> int:
+    """
+    Calculate optimal batch size based on operation type and record count.
+    
+    Uses adaptive sizing: smaller batches for very large operations,
+    larger batches for small operations to reduce round trips.
+    
+    Args:
+        operation_type: Type of operation (INSERT, UPDATE, DELETE)
+        record_count: Total number of records to process
+        
+    Returns:
+        Optimal batch size for chunking
+    """
+    if operation_type == OperationType.INSERT:
+        base_size = DEFAULT_BATCH_SIZE_INSERT
+        # For very large inserts (>100k), use smaller batches to avoid timeouts
+        if record_count > 100000:
+            return base_size // 2
+        # For small operations (<1k), use larger batches
+        elif record_count < 1000:
+            return base_size * 2
+        return base_size
+    elif operation_type == OperationType.UPDATE:
+        base_size = DEFAULT_BATCH_SIZE_UPDATE
+        # Updates are slower due to WHERE clauses, so use smaller batches for large ops
+        if record_count > 50000:
+            return base_size // 2
+        elif record_count < 500:
+            return base_size * 2
+        return base_size
+    elif operation_type == OperationType.DELETE:
+        base_size = DEFAULT_BATCH_SIZE_DELETE
+        # Similar to inserts but can be slower with constraints
+        if record_count > 100000:
+            return base_size // 2
+        elif record_count < 1000:
+            return base_size * 2
+        return base_size
+    else:
+        # Default batch size for unknown operations
+        return 1000
+
+
+def _chunk_list(items: list[Any], chunk_size: int) -> list[list[Any]]:
+    """
+    Split a list into chunks of specified size.
+    
+    Args:
+        items: List to chunk
+        chunk_size: Size of each chunk
+        
+    Returns:
+        List of chunks
+    """
+    return [items[i : i + chunk_size] for i in range(0, len(items), chunk_size)]
+
 
 def pull_table(
     engine: Engine,
@@ -423,7 +487,7 @@ def _execute_deletes(
     schema: str | None = None,
 ) -> None:
     """
-    Execute delete operations.
+    Execute delete operations with adaptive batching.
 
     Args:
         connection: SQLAlchemy connection within a transaction
@@ -438,6 +502,12 @@ def _execute_deletes(
     # Convert numpy types to Python native types
     clean_keys = [convert_numpy_types(key) for key in delete_keys]
 
+    # Calculate optimal batch size
+    batch_size = _calculate_batch_size(OperationType.DELETE, len(clean_keys))
+    
+    # Chunk deletes into batches
+    chunks = _chunk_list(clean_keys, batch_size)
+    
     # Build a minimal Table object with just the primary key column(s)
     # We know the primary key name(s) from the parameter, so we don't need inspect
     # Use Integer as a generic type - SQLAlchemy will handle the actual comparison
@@ -449,31 +519,32 @@ def _execute_deletes(
         # Single column PK
         pk_col = Column(primary_key, Integer)
         table = Table(table_name, metadata, pk_col, schema=schema)
-        # Execute DELETE using individual WHERE clauses for each key
-        # This ensures each delete executes correctly
-        for key in clean_keys:
-            stmt = table.delete().where(table.c[primary_key] == key)
-            result = connection.execute(stmt)
-            # Check if delete actually worked
-            if result.rowcount == 0:
-                # Row might not exist - log but continue
-                import warnings
+        # Execute DELETE using individual WHERE clauses for each key in batches
+        for chunk in chunks:
+            for key in chunk:
+                stmt = table.delete().where(table.c[primary_key] == key)
+                result = connection.execute(stmt)
+                # Check if delete actually worked
+                if result.rowcount == 0:
+                    # Row might not exist - log but continue
+                    import warnings
 
-                warnings.warn(
-                    f"DELETE statement for {primary_key}={key} affected 0 rows", stacklevel=3
-                )
+                    warnings.warn(
+                        f"DELETE statement for {primary_key}={key} affected 0 rows", stacklevel=3
+                    )
     else:
         # Composite PK - build table with all PK columns
         pk_cols = [Column(pk_name, Integer) for pk_name in primary_key]
         table = Table(table_name, metadata, *pk_cols, schema=schema)
-        # Execute individual deletes for each composite key
+        # Execute individual deletes for each composite key in batches
         from sqlalchemy import and_
 
-        for key_value in clean_keys:
-            if isinstance(key_value, (tuple, list)) and len(key_value) == len(primary_key):
-                conditions = [table.c[pk_col] == val for pk_col, val in zip(primary_key, key_value)]
-                stmt = table.delete().where(and_(*conditions))
-                connection.execute(stmt)
+        for chunk in chunks:
+            for key_value in chunk:
+                if isinstance(key_value, (tuple, list)) and len(key_value) == len(primary_key):
+                    conditions = [table.c[pk_col] == val for pk_col, val in zip(primary_key, key_value)]
+                    stmt = table.delete().where(and_(*conditions))
+                    connection.execute(stmt)
 
 
 def _execute_updates(
@@ -484,7 +555,7 @@ def _execute_updates(
     schema: str | None = None,
 ) -> None:
     """
-    Execute update operations.
+    Execute update operations with adaptive batching.
 
     Args:
         connection: SQLAlchemy connection within a transaction
@@ -495,6 +566,12 @@ def _execute_updates(
     """
     if not update_records or not primary_key:
         return
+
+    # Calculate optimal batch size
+    batch_size = _calculate_batch_size(OperationType.UPDATE, len(update_records))
+    
+    # Chunk updates into batches
+    chunks = _chunk_list(update_records, batch_size)
 
     # Use autoload_with to load table structure from the existing connection
     # This ensures we see the current transaction state, including any schema changes
@@ -509,48 +586,50 @@ def _execute_updates(
         # Composite PK
         pk_cols = list(primary_key)
 
-    for record in update_records:
-        # Extract PK values
-        if len(pk_cols) == 1:
-            pk_value = convert_numpy_types(record.get(pk_cols[0]))
-            if pk_value is None:
-                continue
-
-            # Separate primary key from update values
-            update_values = {
-                k: convert_numpy_types(v) for k, v in record.items() if k != pk_cols[0]
-            }
-
-            # Build UPDATE statement
-            stmt = table.update().where(table.c[pk_cols[0]] == pk_value).values(**update_values)
-        else:
-            # Composite PK - build condition for all PK columns
-            from sqlalchemy import and_
-
-            # Check all PK columns are present
-            if not all(pk_col in record for pk_col in pk_cols):
-                continue
-
-            # Build WHERE clause for composite key
-            conditions = []
-            for pk_col in pk_cols:
-                pk_val = convert_numpy_types(record.get(pk_col))
-                if pk_val is None:
+    # Process updates in batches
+    for chunk in chunks:
+        for record in chunk:
+            # Extract PK values
+            if len(pk_cols) == 1:
+                pk_value = convert_numpy_types(record.get(pk_cols[0]))
+                if pk_value is None:
                     continue
-                conditions.append(table.c[pk_col] == pk_val)
 
-            if not conditions or len(conditions) != len(pk_cols):
-                continue
+                # Separate primary key from update values
+                update_values = {
+                    k: convert_numpy_types(v) for k, v in record.items() if k != pk_cols[0]
+                }
 
-            # Separate PK from update values
-            update_values = {
-                k: convert_numpy_types(v) for k, v in record.items() if k not in pk_cols
-            }
+                # Build UPDATE statement
+                stmt = table.update().where(table.c[pk_cols[0]] == pk_value).values(**update_values)
+            else:
+                # Composite PK - build condition for all PK columns
+                from sqlalchemy import and_
 
-            # Build UPDATE statement
-            stmt = table.update().where(and_(*conditions)).values(**update_values)
+                # Check all PK columns are present
+                if not all(pk_col in record for pk_col in pk_cols):
+                    continue
 
-        connection.execute(stmt)
+                # Build WHERE clause for composite key
+                conditions = []
+                for pk_col in pk_cols:
+                    pk_val = convert_numpy_types(record.get(pk_col))
+                    if pk_val is None:
+                        continue
+                    conditions.append(table.c[pk_col] == pk_val)
+
+                if not conditions or len(conditions) != len(pk_cols):
+                    continue
+
+                # Separate PK from update values
+                update_values = {
+                    k: convert_numpy_types(v) for k, v in record.items() if k not in pk_cols
+                }
+
+                # Build UPDATE statement
+                stmt = table.update().where(and_(*conditions)).values(**update_values)
+
+            connection.execute(stmt)
 
 
 def _execute_inserts(
@@ -560,7 +639,7 @@ def _execute_inserts(
     schema: str | None = None,
 ) -> None:
     """
-    Execute insert operations.
+    Execute insert operations with adaptive batching.
 
     Args:
         connection: SQLAlchemy connection within a transaction
@@ -576,6 +655,12 @@ def _execute_inserts(
 
     if not clean_records:
         return
+
+    # Calculate optimal batch size
+    batch_size = _calculate_batch_size(OperationType.INSERT, len(clean_records))
+    
+    # Chunk inserts into batches
+    chunks = _chunk_list(clean_records, batch_size)
 
     # Use raw SQLAlchemy insert instead of pandas to_sql to avoid connection issues
     # This is especially important for MySQL and PostgreSQL which can have connection
@@ -599,8 +684,9 @@ def _execute_inserts(
 
     table = Table(table_name, metadata, *columns, schema=schema)
 
-    # Execute inserts in batch
-    connection.execute(insert(table), clean_records)
+    # Execute inserts in batches
+    for chunk in chunks:
+        connection.execute(insert(table), chunk)
 
 
 def _pandas_dtype_to_python_type(dtype: Any) -> type:

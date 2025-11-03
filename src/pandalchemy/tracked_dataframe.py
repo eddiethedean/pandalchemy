@@ -14,6 +14,7 @@ from pandas import DataFrame
 from sqlalchemy import Engine
 
 from pandalchemy.change_tracker import ChangeTracker
+from pandalchemy.execution_plan import OperationType
 
 
 class TableDataFrame:
@@ -159,6 +160,8 @@ class TableDataFrame:
         schema: str | None = None,
         auto_increment: bool = False,
         tracker: ChangeTracker | None = None,
+        tracking_mode: str = "incremental",
+        conflict_strategy: str = "last_writer_wins",
     ):
         """
         Initialize a TableDataFrame.
@@ -176,7 +179,11 @@ class TableDataFrame:
             schema: Optional schema name
             auto_increment: If True, enable auto-increment for primary key
             tracker: Optional existing ChangeTracker, creates new one if None
+            tracking_mode: 'full' stores full original DataFrame, 'incremental' stores only changes (default)
+            conflict_strategy: Conflict resolution strategy: 'last_writer_wins', 'first_writer_wins', 'abort', 'merge' (default: 'last_writer_wins')
         """
+        object.__setattr__(self, "_tracking_mode", tracking_mode)
+        object.__setattr__(self, "_conflict_strategy", conflict_strategy)
         from pandalchemy.sql_operations import get_primary_key, pull_table, table_exists
 
         # Handle dual calling patterns
@@ -258,7 +265,7 @@ class TableDataFrame:
         object.__setattr__(self, "_data", data)
 
         if tracker is None:
-            tracker = ChangeTracker(self._primary_key, data)
+            tracker = ChangeTracker(self._primary_key, data, tracking_mode=tracking_mode)
         object.__setattr__(self, "_tracker", tracker)
 
     def __getattr__(self, name: str) -> Any:
@@ -314,7 +321,13 @@ class TableDataFrame:
                 result = attr(*args, **kwargs)
                 # Wrap DataFrame results with NEW independent tracker
                 if isinstance(result, DataFrame):
-                    return TableDataFrame(data=result, primary_key=self._primary_key, tracker=None)
+                    return TableDataFrame(
+                        data=result,
+                        primary_key=self._primary_key,
+                        tracker=None,
+                        tracking_mode=self._tracking_mode,
+                        conflict_strategy=self._conflict_strategy,
+                    )
                 return result
 
             return wrapped_returning_method
@@ -350,7 +363,13 @@ class TableDataFrame:
 
         # If result is a DataFrame, wrap it with NEW independent tracker
         if isinstance(result, DataFrame):
-            return TableDataFrame(data=result, primary_key=self._primary_key, tracker=None)
+            return TableDataFrame(
+                data=result,
+                primary_key=self._primary_key,
+                tracker=None,
+                tracking_mode=self._tracking_mode,
+                conflict_strategy=self._conflict_strategy,
+            )
 
         return result
 
@@ -504,7 +523,9 @@ class TableDataFrame:
             New TableDataFrame instance
         """
         new_data = self._data.copy(deep=deep)
-        new_tracker = ChangeTracker(self._primary_key, new_data)
+        new_tracker = ChangeTracker(
+            self._primary_key, new_data, tracking_mode=self._tracking_mode
+        )
         return TableDataFrame(
             name=self.name,
             data=new_data,
@@ -514,6 +535,8 @@ class TableDataFrame:
             schema=self.schema,
             auto_increment=self.auto_increment,
             tracker=new_tracker,
+            tracking_mode=self._tracking_mode,
+            conflict_strategy=self._conflict_strategy,
         )
 
     # ============================================================================
@@ -804,12 +827,13 @@ class TableDataFrame:
 
     def has_changes(self) -> bool:
         """
-        Check if there are any tracked changes.
+        Check if this DataFrame has any tracked changes.
 
         Returns:
-            True if changes have been tracked
+            True if there are changes, False otherwise
         """
-        return self._tracker.has_changes()
+        # Trigger lazy computation by passing current data
+        return self._tracker.has_changes(current_data=self._data)
 
     def get_changes_summary(self) -> dict:
         """
@@ -818,6 +842,8 @@ class TableDataFrame:
         Returns:
             Dictionary with counts and details of changes
         """
+        # Trigger lazy computation before getting summary
+        self._tracker.compute_row_changes(self._data)
         return self._tracker.get_summary()
 
     # Primary Key Operations
@@ -1061,17 +1087,58 @@ class TableDataFrame:
         # VALIDATE: updates should NOT include PK columns
         pk_in_updates = [col for col in pk_cols if col in updates]
         if pk_in_updates:
+            # Get old and new values for better error message
+            old_pk_value = primary_key_value
+            new_pk_values = {col: updates[col] for col in pk_in_updates}
+            if len(pk_in_updates) == 1:
+                new_pk_value = list(new_pk_values.values())[0]
+                pk_change_msg = f"value: {old_pk_value} → {new_pk_value}"
+            else:
+                new_pk_value = tuple(new_pk_values[col] for col in pk_cols)
+                pk_change_msg = f"value: {primary_key_value} → {new_pk_value}"
+            
+            table_ref = f"{self.name}." if self.name else "table."
+            suggested_fix = (
+                "Primary keys are immutable. Delete and re-insert instead:\n"
+                f"    old_data = {table_ref}get_row({primary_key_value})\n"
+                f"    {table_ref}delete_row({primary_key_value})\n"
+                f"    {table_ref}add_row({{**old_data, **{new_pk_values}}})"
+            )
+            
+            operation_str = f"update_row({primary_key_value}, {updates})"
+            
             raise DataValidationError(
-                f"Cannot update primary key column(s): {pk_in_updates}. "
-                "Primary keys are immutable. To change a primary key, "
-                "delete the row and insert a new one with the desired key.",
-                details={"attempted_pk_updates": pk_in_updates, "primary_key": pk_cols},
+                f"Cannot update primary key 'id' ({pk_change_msg})",
+                table_name=self.name,
+                operation=operation_str,
+                affected_rows=[primary_key_value],
+                error_code="PK_IMMUTABLE",
+                suggested_fix=suggested_fix,
+                details={
+                    "attempted_pk_updates": pk_in_updates,
+                    "primary_key": pk_cols,
+                    "old_pk_value": old_pk_value,
+                    "new_pk_values": new_pk_values,
+                },
             )
 
         condition = self._get_pk_condition(primary_key_value)
 
         if not condition.any():
-            raise ValueError(f"No row found with primary key value: {primary_key_value}")
+            from pandalchemy.exceptions import DataValidationError
+            
+            raise DataValidationError(
+                f"No row found with primary key value: {primary_key_value}",
+                table_name=self.name,
+                operation=f"update_row({primary_key_value}, {updates})",
+                affected_rows=[primary_key_value],
+                error_code="ROW_NOT_FOUND",
+                suggested_fix=(
+                    f"Verify the primary key value exists:\n"
+                    f"    {f'{self.name}.' if self.name else 'table.'}get_row({primary_key_value})\n"
+                    f"Or use add_row() to create a new row instead."
+                ),
+            )
 
         self._tracker.record_operation("update_row", primary_key_value, updates)
 
@@ -1188,12 +1255,25 @@ class TableDataFrame:
             df.delete_row(('user123', 'org456'))
 
         Raises:
-            ValueError: If row with primary key doesn't exist
+            DataValidationError: If row with primary key doesn't exist
         """
+        from pandalchemy.exceptions import DataValidationError
+        
         condition = self._get_pk_condition(primary_key_value)
 
         if not condition.any():
-            raise ValueError(f"No row found with primary key value: {primary_key_value}")
+            raise DataValidationError(
+                f"No row found with primary key value: {primary_key_value}",
+                table_name=self.name,
+                operation=f"delete_row({primary_key_value})",
+                affected_rows=[primary_key_value],
+                error_code="ROW_NOT_FOUND",
+                suggested_fix=(
+                    f"Verify the primary key value exists:\n"
+                    f"    {f'{self.name}.' if self.name else 'table.'}get_row({primary_key_value})\n"
+                    f"The row may have already been deleted or the primary key value is incorrect."
+                ),
+            )
 
         self._tracker.record_operation("delete_row", primary_key_value)
 
@@ -1438,7 +1518,19 @@ class TableDataFrame:
         from pandalchemy.exceptions import SchemaError
 
         if name in self._data.columns:
-            raise SchemaError(f"Column '{name}' already exists", details={"column": name})
+            existing_columns = list(self._data.columns)
+            raise SchemaError(
+                f"Column '{name}' already exists",
+                table_name=self.name,
+                operation=f"add_column_with_default('{name}', ...)",
+                error_code="COLUMN_EXISTS",
+                suggested_fix=(
+                    f"Column '{name}' already exists in table '{self.name or 'table'}'. "
+                    f"Use rename_column_safe() to rename it, or drop_column_safe() to remove it first.\n"
+                    f"Existing columns: {existing_columns[:10]}{'...' if len(existing_columns) > 10 else ''}"
+                ),
+                details={"column": name, "existing_columns": existing_columns},
+            )
 
         self._tracker.record_operation("add_column_with_default", name, default_value, dtype)
         self._data[name] = default_value
@@ -1461,7 +1553,18 @@ class TableDataFrame:
         from pandalchemy.exceptions import SchemaError
 
         if name not in self._data.columns:
-            raise SchemaError(f"Column '{name}' does not exist", details={"column": name})
+            existing_columns = list(self._data.columns)
+            raise SchemaError(
+                f"Column '{name}' does not exist",
+                table_name=self.name,
+                operation=f"drop_column_safe('{name}')",
+                error_code="COLUMN_NOT_FOUND",
+                suggested_fix=(
+                    f"Column '{name}' does not exist in table '{self.name or 'table'}'. "
+                    f"Available columns: {existing_columns[:10]}{'...' if len(existing_columns) > 10 else ''}"
+                ),
+                details={"column": name, "existing_columns": existing_columns},
+            )
 
         self._tracker.record_operation("drop_column_safe", name)
         self._data = self._data.drop(columns=[name])
@@ -1480,11 +1583,33 @@ class TableDataFrame:
         """
         from pandalchemy.exceptions import SchemaError
 
+        existing_columns = list(self._data.columns)
+        
         if old_name not in self._data.columns:
-            raise SchemaError(f"Column '{old_name}' does not exist", details={"column": old_name})
+            raise SchemaError(
+                f"Column '{old_name}' does not exist",
+                table_name=self.name,
+                operation=f"rename_column_safe('{old_name}', '{new_name}')",
+                error_code="COLUMN_NOT_FOUND",
+                suggested_fix=(
+                    f"Column '{old_name}' does not exist in table '{self.name or 'table'}'. "
+                    f"Available columns: {existing_columns[:10]}{'...' if len(existing_columns) > 10 else ''}"
+                ),
+                details={"column": old_name, "existing_columns": existing_columns},
+            )
 
         if new_name in self._data.columns:
-            raise SchemaError(f"Column '{new_name}' already exists", details={"column": new_name})
+            raise SchemaError(
+                f"Column '{new_name}' already exists",
+                table_name=self.name,
+                operation=f"rename_column_safe('{old_name}', '{new_name}')",
+                error_code="COLUMN_EXISTS",
+                suggested_fix=(
+                    f"Cannot rename '{old_name}' to '{new_name}' because '{new_name}' already exists. "
+                    f"Choose a different name or drop the existing column first."
+                ),
+                details={"column": new_name, "existing_columns": existing_columns},
+            )
 
         self._tracker.record_operation("rename_column_safe", old_name, new_name)
         self._data = self._data.rename(columns={old_name: new_name})
@@ -1579,9 +1704,6 @@ class TableDataFrame:
         # Get the current pandas DataFrame
         current_df = self.to_pandas()
 
-        # Build execution plan
-        plan = ExecutionPlan(self._tracker, current_df)
-
         # Check if table exists
         if not table_exists(self.engine, self.name, self.schema):
             # Create new table
@@ -1589,11 +1711,119 @@ class TableDataFrame:
                 self.engine, self.name, current_df, self._primary_key, self.schema, if_exists="fail"
             )
         else:
+            # Detect and resolve conflicts before executing plan
+            plan = self._build_plan_with_conflict_resolution(current_df)
+            
             # Execute the plan to update existing table
             execute_plan(self.engine, self.name, plan, self.schema, self._primary_key)
 
         # Refresh the table after successful push
         self.pull()
+
+    def _build_plan_with_conflict_resolution(self, current_df: pd.DataFrame) -> ExecutionPlan:
+        """
+        Build execution plan with conflict detection and resolution.
+        
+        Args:
+            current_df: Current DataFrame state
+            
+        Returns:
+            ExecutionPlan with conflicts resolved according to strategy
+        """
+        from pandalchemy.conflict_resolution import (
+            ConflictStrategy,
+            detect_conflicts,
+            resolve_conflicts,
+        )
+        from pandalchemy.execution_plan import ExecutionPlan
+        from pandalchemy.sql_operations import pull_table
+
+        # Build initial plan
+        plan: ExecutionPlan = ExecutionPlan(self._tracker, current_df)
+
+        # If no updates, no conflicts possible
+        updates = plan.get_steps_by_type(OperationType.UPDATE)
+        if not updates:
+            return plan
+
+        # Get current remote state for conflict detection
+        remote_df = pull_table(
+            self.engine, self.name, self.schema, self._primary_key, set_index=True
+        )
+
+        # Extract local changes from update step
+        update_step = updates[0]
+        local_changes: dict[Any, dict[str, Any]] = {}
+
+        # Build dict of local changes by PK
+        for record in update_step.data:
+            if isinstance(self._primary_key, str):
+                pk_value = record.get(self._primary_key)
+            else:
+                pk_value = tuple(record.get(col) for col in self._primary_key)
+
+            if pk_value:
+                # Extract non-PK columns as changes
+                local_changes[pk_value] = {
+                    k: v
+                    for k, v in record.items()
+                    if (isinstance(self._primary_key, str) and k != self._primary_key)
+                    or (isinstance(self._primary_key, list) and k not in self._primary_key)
+                }
+
+        # Detect conflicts - pass original data for better conflict detection
+        original_data = self._tracker.original_data if self._tracker.original_data is not None else None
+        conflicts = detect_conflicts(
+            current_df,
+            remote_df,
+            self._primary_key,
+            local_changes,
+            original_data=original_data,
+        )
+
+        # If conflicts found, resolve them
+        if conflicts:
+            try:
+                strategy = ConflictStrategy(self._conflict_strategy)
+            except ValueError:
+                # Invalid strategy, default to last_writer_wins
+                strategy = ConflictStrategy.LAST_WRITER_WINS
+
+            resolved_changes = resolve_conflicts(
+                conflicts,
+                strategy,
+                table_name=self.name,
+                primary_key=self._primary_key,
+            )
+
+            # Update the plan with resolved changes
+            # Filter out rows where resolved_changes is empty (first_writer_wins)
+            filtered_records = []
+            for record in update_step.data:
+                if isinstance(self._primary_key, str):
+                    pk_value = record.get(self._primary_key)
+                else:
+                    pk_value = tuple(record.get(col) for col in self._primary_key)
+
+                if pk_value in resolved_changes:
+                    resolved = resolved_changes[pk_value]
+                    if resolved:  # Only include if there are changes to apply
+                        # Merge resolved changes into record
+                        updated_record = record.copy()
+                        updated_record.update(resolved)
+                        filtered_records.append(updated_record)
+                else:
+                    # No conflict, keep original change
+                    filtered_records.append(record)
+
+            # Update the plan step with filtered records
+            if filtered_records:
+                update_step.data = filtered_records
+            else:
+                # All updates were resolved to empty (first_writer_wins), remove step
+                plan.steps = [s for s in plan.steps if s != update_step]
+
+        return plan
 
     def _push_with_connection(self, connection: Any) -> None:
         """
@@ -1629,7 +1859,6 @@ class TableDataFrame:
             ) from e
 
         current_df = self.to_pandas()
-        plan = ExecutionPlan(self._tracker, current_df)
 
         # Ensure engine and key are set
         assert self.engine is not None, "Engine must be set before push"
@@ -1642,6 +1871,8 @@ class TableDataFrame:
                 self.engine, self.name, current_df, self._primary_key, self.schema, if_exists="fail"
             )
         else:
+            # Detect and resolve conflicts before executing plan
+            plan = self._build_plan_with_conflict_resolution(current_df)
             # Execute plan
             execute_plan(self.engine, self.name, plan, self.schema, self._primary_key)
 
@@ -1676,7 +1907,9 @@ class TableDataFrame:
             object.__setattr__(self, "_data", data)
 
             # Reset tracker with fresh data
-            tracker = ChangeTracker(self._primary_key, data)
+            tracker = ChangeTracker(
+                self._primary_key, data, tracking_mode=self._tracking_mode
+            )
             object.__setattr__(self, "_tracker", tracker)
 
     def _generate_next_pk(self) -> int:
@@ -1759,7 +1992,13 @@ class TrackedLocIndexer:
         result = self.indexer[key]
         # Return NEW independent TableDataFrame for DataFrame results
         if isinstance(result, DataFrame):
-            return TableDataFrame(data=result, primary_key=self.parent._primary_key, tracker=None)
+            return TableDataFrame(
+                data=result,
+                primary_key=self.parent._primary_key,
+                tracker=None,
+                tracking_mode=self.parent._tracking_mode,
+                conflict_strategy=self.parent._conflict_strategy,
+            )
         return result
 
     def __setitem__(self, key, value):
@@ -1779,7 +2018,13 @@ class TrackedIlocIndexer:
         result = self.indexer[key]
         # Return NEW independent TableDataFrame for DataFrame results
         if isinstance(result, DataFrame):
-            return TableDataFrame(data=result, primary_key=self.parent._primary_key, tracker=None)
+            return TableDataFrame(
+                data=result,
+                primary_key=self.parent._primary_key,
+                tracker=None,
+                tracking_mode=self.parent._tracking_mode,
+                conflict_strategy=self.parent._conflict_strategy,
+            )
         return result
 
     def __setitem__(self, key, value):

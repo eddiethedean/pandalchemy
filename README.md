@@ -153,6 +153,191 @@ See [Full Limitations Guide](#full-limitations) for details and workarounds.
 
 ---
 
+## Troubleshooting
+
+### Error: "Cannot update primary key"
+
+**Problem**: You're trying to update a primary key column, which is immutable.
+
+**Solution**:
+```python
+# ❌ This fails
+users.update_row(1, {'id': 999})  # Raises DataValidationError
+
+# ✅ Instead, delete and re-insert
+old_data = users.get_row(1)
+users.delete_row(1)
+users.add_row({**old_data, 'id': 999})
+users.push()
+```
+
+**Enhanced Error Message**: The error now includes detailed context showing which table, operation, and suggested fix.
+
+---
+
+### Error: "Boolean column errors in SQLite"
+
+**Problem**: SQLite doesn't accept NaN values for BOOLEAN columns.
+
+**Solution**:
+```python
+# ❌ This may fail
+users['active'] = None  # Becomes NaN, may fail on push
+
+# ✅ Use explicit False instead
+users.add_column_with_default('active', False)
+# Or handle None explicitly
+users['active'] = users['active'].fillna(False)
+```
+
+---
+
+### Issue: "Schema changes not visible after push"
+
+**Problem**: Schema changes (add/drop/rename columns) need to be pushed separately, then you need to pull to refresh.
+
+**Solution**:
+```python
+# Add column
+users.add_column_with_default('email', '')
+users.push()  # Push schema change first
+
+# Pull to refresh with new schema
+users.pull()
+
+# Now you can update the new column
+users['email'] = 'user@example.com'
+users.push()  # Push data changes
+```
+
+**Best Practice**: Push schema changes and data changes in separate transactions for reliability.
+
+---
+
+### Issue: "Memory issues with large tables"
+
+**Problem**: Working with very large tables can consume significant memory.
+
+**Solutions**:
+1. **Use lazy change computation** (already implemented):
+   ```python
+   # Changes are only computed when needed
+   users['age'] = users['age'] + 1  # No computation yet
+   if users.has_changes():  # Computes here if needed
+       users.push()
+   ```
+
+2. **Use bulk operations instead of loops**:
+   ```python
+   # ✅ Fast - single bulk operation
+   users.update_where(users._data['age'] > 65, {'senior': True})
+   users.bulk_insert(new_rows)
+
+   # ❌ Slow - many individual operations
+   for row in new_rows:
+       users.add_row(row)
+   ```
+
+3. **Batch your changes**:
+   ```python
+   # Make all changes first
+   users['age'] = users['age'] + 1
+   users['status'] = 'active'
+   # Then push once
+   users.push()  # Single transaction
+   ```
+
+---
+
+### Issue: "Transaction rollback not working as expected"
+
+**Problem**: Understanding when transactions rollback and when they commit.
+
+**Solution**: 
+- `push()` automatically wraps all changes in a transaction
+- If any error occurs, the entire transaction rolls back
+- Schema changes and data changes happen in the correct order automatically
+
+```python
+try:
+    users['age'] = users['age'] + 1
+    products['price'] = products['price'] * 1.1
+    db.push()  # All changes in one transaction
+except Exception as e:
+    # All changes rolled back automatically
+    print(f"Error: {e}. No changes were committed.")
+```
+
+---
+
+### Error: "No row found with primary key value"
+
+**Problem**: Trying to update or delete a row that doesn't exist.
+
+**Solution**: Check if the row exists first, or use `upsert_row()`:
+```python
+# Check first
+if users.row_exists(pk_value):
+    users.update_row(pk_value, updates)
+else:
+    # Row doesn't exist, create it
+    users.add_row({**updates, 'id': pk_value})
+
+# Or use upsert (update if exists, insert if not)
+users.upsert_row({**updates, 'id': pk_value})
+```
+
+**Enhanced Error**: The error message now shows the table name, operation, and suggests using `get_row()` or `row_exists()` to verify.
+
+---
+
+### Issue: "Performance is slow with many updates"
+
+**Problem**: Many individual `update_row()` calls are slow.
+
+**Solution**: Use `update_where()` for bulk conditional updates:
+```python
+# ✅ Fast - single SQL operation
+users.update_where(
+    users._data['age'] > 65,
+    {'senior': True, 'discount': 0.1}
+)
+
+# ❌ Slow - many SQL operations
+for idx in old_users.index:
+    users.update_row(idx, {'senior': True, 'discount': 0.1})
+```
+
+---
+
+### Error: "Column 'X' does not exist"
+
+**Problem**: Trying to access or modify a column that doesn't exist in the DataFrame.
+
+**Enhanced Error**: The error now shows:
+- Which table you're working with
+- The operation that failed
+- Available columns in the table
+- Suggested fix
+
+**Solution**: Check column names and use `add_column_with_default()` if you need to add it:
+```python
+# Check available columns
+print(users.columns.tolist())
+
+# Add missing column if needed
+if 'new_column' not in users.columns:
+    users.add_column_with_default('new_column', default_value=0)
+    users.push()  # Push schema change
+    users.pull()  # Refresh
+```
+
+---
+
+For more detailed troubleshooting, see the [Full Limitations Guide](#full-limitations) below.
+
+---
+
 ## Installation & Setup
 
 ### Requirements
@@ -293,6 +478,8 @@ users.push()  # All changes in one transaction
 
 ## Performance Tips
 
+### Quick Performance Wins
+
 - **Bulk inserts**: Use `bulk_insert()` instead of looping `add_row()`
 - **Minimize push()**: Batch all changes, then push once
 - **Conditional updates**: Use `update_where()` instead of looping `update_row()`
@@ -306,6 +493,98 @@ users.update_where(users._data['age'] > 65, {'senior': True})
 for row in rows: table.add_row(row)
 for idx in old_users.index: users.update_row(idx, {'senior': True})
 ```
+
+### Performance Tuning Guide
+
+#### When to Use `bulk_insert()` vs `add_row()`
+
+Use `bulk_insert()` when inserting multiple rows:
+```python
+# ✅ Fast - Single SQL operation
+users.bulk_insert([
+    {'name': 'Alice', 'age': 30},
+    {'name': 'Bob', 'age': 25},
+    {'name': 'Charlie', 'age': 35}
+])
+
+# ❌ Slow - Multiple SQL operations
+for row in rows:
+    users.add_row(row)
+```
+
+**Benchmark**: `bulk_insert()` is typically 10-100x faster for 100+ rows.
+
+#### Batching Strategies for Large Updates
+
+1. **Batch by condition**: Use `update_where()` for conditional bulk updates
+```python
+# ✅ Process all matching rows in one operation
+users.update_where(
+    users._data['status'] == 'pending',
+    {'processed': True, 'processed_at': datetime.now()}
+)
+```
+
+2. **Batch by chunks**: For very large datasets, process in chunks
+```python
+# Process 1000 rows at a time
+chunk_size = 1000
+for i in range(0, len(users), chunk_size):
+    chunk = users.iloc[i:i+chunk_size]
+    # Process chunk
+    chunk['age'] = chunk['age'] + 1
+    chunk.push()  # Push this chunk
+```
+
+#### Memory Optimization Tips
+
+1. **Use lazy computation**: Changes are computed only when needed
+```python
+# Make changes
+users['age'] = users['age'] + 1
+# Computation hasn't happened yet - no performance cost
+
+# Only computes when you check or push
+if users.has_changes():  # Computes here if needed
+    users.push()
+```
+
+2. **Pull only what you need**: If working with large tables, filter before pulling
+```python
+# ❌ Pulls entire table into memory
+users = db['users']  # Could be millions of rows
+
+# ✅ Pull with filter (if supported by your workflow)
+# Or work with specific columns
+users = db['users']
+subset = users[users['department'] == 'Sales']  # Work with subset
+```
+
+3. **Connection pooling**: Use SQLAlchemy connection pooling for better performance
+```python
+from sqlalchemy import create_engine
+from sqlalchemy.pool import QueuePool
+
+engine = create_engine(
+    'postgresql://localhost/mydb',
+    poolclass=QueuePool,
+    pool_size=5,
+    max_overflow=10
+)
+```
+
+#### Performance Benchmarks
+
+Typical performance characteristics:
+- **bulk_insert()**: ~10,000 rows/second (depends on row size and database)
+- **update_where()**: ~5,000-10,000 rows/second (depends on condition complexity)
+- **push()**: ~1,000-5,000 operations/second (combines all changes into optimized SQL)
+
+**Note**: Actual performance depends on:
+- Database type (PostgreSQL, MySQL, SQLite)
+- Network latency (for remote databases)
+- Row size and complexity
+- Index presence on affected columns
 
 ---
 

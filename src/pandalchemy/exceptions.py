@@ -68,25 +68,27 @@ class PandalchemyError(Exception):
             Formatted error message with context and suggestions
         """
         lines = [f"{self.__class__.__name__}: {self.message}"]
-        
+
         if self.table_name:
             lines.append(f"  Table: '{self.table_name}'")
-        
+
         if self.operation:
             lines.append(f"  Operation: {self.operation}")
-        
+
         if self.affected_rows:
             if len(self.affected_rows) <= 5:
                 lines.append(f"  Affected Rows: {self.affected_rows}")
             else:
-                lines.append(f"  Affected Rows: {len(self.affected_rows)} rows (showing first 5: {self.affected_rows[:5]}...)")
-        
+                lines.append(
+                    f"  Affected Rows: {len(self.affected_rows)} rows (showing first 5: {self.affected_rows[:5]}...)"
+                )
+
         if self.error_code:
             lines.append(f"  Error Code: {self.error_code}")
-        
+
         if self.suggested_fix:
             lines.append(f"  Fix: {self.suggested_fix}")
-        
+
         if self.details:
             if isinstance(self.details, dict):
                 detail_strs = [f"    {k}: {v}" for k, v in self.details.items()]
@@ -95,7 +97,7 @@ class PandalchemyError(Exception):
                     lines.extend(detail_strs)
             else:
                 lines.append(f"  Details: {self.details}")
-        
+
         return "\n".join(lines)
 
     def __str__(self) -> str:
@@ -217,23 +219,23 @@ class ConflictError(PandalchemyError):
     def format_error(self) -> str:
         """Generate formatted error message with conflict details."""
         lines = [f"{self.__class__.__name__}: {self.message}"]
-        
+
         if self.table_name:
             lines.append(f"  Table: '{self.table_name}'")
-        
+
         if self.primary_key is not None:
             lines.append(f"  Primary Key: {self.primary_key}")
-        
+
         if self.conflicting_columns:
             lines.append(f"  Conflicting Columns: {self.conflicting_columns}")
-        
+
         if self.local_changes:
             lines.append(f"  Local Changes: {self.local_changes}")
-        
+
         if self.remote_changes:
             lines.append(f"  Remote Changes: {self.remote_changes}")
-        
+
         if self.suggested_fix:
             lines.append(f"  Fix: {self.suggested_fix}")
-        
+
         return "\n".join(lines)

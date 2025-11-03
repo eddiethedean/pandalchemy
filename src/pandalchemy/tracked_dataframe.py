@@ -14,7 +14,7 @@ from pandas import DataFrame
 from sqlalchemy import Engine
 
 from pandalchemy.change_tracker import ChangeTracker
-from pandalchemy.execution_plan import OperationType
+from pandalchemy.execution_plan import ExecutionPlan, OperationType
 
 
 class TableDataFrame:
@@ -523,9 +523,7 @@ class TableDataFrame:
             New TableDataFrame instance
         """
         new_data = self._data.copy(deep=deep)
-        new_tracker = ChangeTracker(
-            self._primary_key, new_data, tracking_mode=self._tracking_mode
-        )
+        new_tracker = ChangeTracker(self._primary_key, new_data, tracking_mode=self._tracking_mode)
         return TableDataFrame(
             name=self.name,
             data=new_data,
@@ -1096,7 +1094,7 @@ class TableDataFrame:
             else:
                 new_pk_value = tuple(new_pk_values[col] for col in pk_cols)
                 pk_change_msg = f"value: {primary_key_value} → {new_pk_value}"
-            
+
             table_ref = f"{self.name}." if self.name else "table."
             suggested_fix = (
                 "Primary keys are immutable. Delete and re-insert instead:\n"
@@ -1104,9 +1102,9 @@ class TableDataFrame:
                 f"    {table_ref}delete_row({primary_key_value})\n"
                 f"    {table_ref}add_row({{**old_data, **{new_pk_values}}})"
             )
-            
+
             operation_str = f"update_row({primary_key_value}, {updates})"
-            
+
             raise DataValidationError(
                 f"Cannot update primary key 'id' ({pk_change_msg})",
                 table_name=self.name,
@@ -1126,7 +1124,7 @@ class TableDataFrame:
 
         if not condition.any():
             from pandalchemy.exceptions import DataValidationError
-            
+
             raise DataValidationError(
                 f"No row found with primary key value: {primary_key_value}",
                 table_name=self.name,
@@ -1258,7 +1256,7 @@ class TableDataFrame:
             DataValidationError: If row with primary key doesn't exist
         """
         from pandalchemy.exceptions import DataValidationError
-        
+
         condition = self._get_pk_condition(primary_key_value)
 
         if not condition.any():
@@ -1584,7 +1582,7 @@ class TableDataFrame:
         from pandalchemy.exceptions import SchemaError
 
         existing_columns = list(self._data.columns)
-        
+
         if old_name not in self._data.columns:
             raise SchemaError(
                 f"Column '{old_name}' does not exist",
@@ -1672,7 +1670,6 @@ class TableDataFrame:
             SQLAlchemyError: If any database operation fails
         """
         from pandalchemy.exceptions import DataValidationError, SchemaError
-        from pandalchemy.execution_plan import ExecutionPlan
         from pandalchemy.sql_operations import (
             create_table_from_dataframe,
             execute_plan,
@@ -1713,7 +1710,7 @@ class TableDataFrame:
         else:
             # Detect and resolve conflicts before executing plan
             plan = self._build_plan_with_conflict_resolution(current_df)
-            
+
             # Execute the plan to update existing table
             execute_plan(self.engine, self.name, plan, self.schema, self._primary_key)
 
@@ -1723,10 +1720,10 @@ class TableDataFrame:
     def _build_plan_with_conflict_resolution(self, current_df: pd.DataFrame) -> ExecutionPlan:
         """
         Build execution plan with conflict detection and resolution.
-        
+
         Args:
             current_df: Current DataFrame state
-            
+
         Returns:
             ExecutionPlan with conflicts resolved according to strategy
         """
@@ -1735,7 +1732,6 @@ class TableDataFrame:
             detect_conflicts,
             resolve_conflicts,
         )
-        from pandalchemy.execution_plan import ExecutionPlan
         from pandalchemy.sql_operations import pull_table
 
         # Build initial plan
@@ -1772,7 +1768,9 @@ class TableDataFrame:
                 }
 
         # Detect conflicts - pass original data for better conflict detection
-        original_data = self._tracker.original_data if self._tracker.original_data is not None else None
+        original_data = (
+            self._tracker.original_data if self._tracker.original_data is not None else None
+        )
         conflicts = detect_conflicts(
             current_df,
             remote_df,
@@ -1793,7 +1791,7 @@ class TableDataFrame:
                 conflicts,
                 strategy,
                 table_name=self.name,
-                primary_key=self._primary_key,
+                _primary_key=self._primary_key,
             )
 
             # Update the plan with resolved changes
@@ -1839,7 +1837,6 @@ class TableDataFrame:
             DataValidationError: If primary key validation fails
         """
         from pandalchemy.exceptions import DataValidationError, SchemaError
-        from pandalchemy.execution_plan import ExecutionPlan
         from pandalchemy.sql_operations import (
             create_table_from_dataframe,
             execute_plan,
@@ -1907,9 +1904,7 @@ class TableDataFrame:
             object.__setattr__(self, "_data", data)
 
             # Reset tracker with fresh data
-            tracker = ChangeTracker(
-                self._primary_key, data, tracking_mode=self._tracking_mode
-            )
+            tracker = ChangeTracker(self._primary_key, data, tracking_mode=self._tracking_mode)
             object.__setattr__(self, "_tracker", tracker)
 
     def _generate_next_pk(self) -> int:

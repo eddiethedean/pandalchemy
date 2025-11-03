@@ -22,7 +22,7 @@ def test_main_module_execution():
 def test_main_module_version():
     """Test that python -m pandalchemy --version works."""
     from pandalchemy._version import version
-    
+
     result = subprocess.run(
         [sys.executable, "-m", "pandalchemy", "--version"], capture_output=True, text=True
     )

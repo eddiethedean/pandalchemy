@@ -9,14 +9,11 @@ from __future__ import annotations
 
 from typing import Any
 
-import pandas as pd
 from pandas import DataFrame
 from sqlalchemy import inspect
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from pandalchemy.change_tracker import ChangeTracker
-from pandalchemy.conflict_resolution import ConflictStrategy
-from pandalchemy.execution_plan import ExecutionPlan, OperationType
 from pandalchemy.sql_operations import table_exists
 from pandalchemy.tracked_dataframe import TableDataFrame
 
@@ -65,7 +62,10 @@ class AsyncTableDataFrame(TableDataFrame):
             from sqlalchemy import create_engine
 
             sync_engine = create_engine(
-                str(engine.url).replace("+asyncpg", "").replace("+aiomysql", "").replace("+aiosqlite", "")
+                str(engine.url)
+                .replace("+asyncpg", "")
+                .replace("+aiomysql", "")
+                .replace("+aiosqlite", "")
             )
 
         super().__init__(
@@ -84,7 +84,9 @@ class AsyncTableDataFrame(TableDataFrame):
         # Store async engine separately
         object.__setattr__(self, "_async_engine", engine)
 
-    async def push(self, engine: AsyncEngine | None = None, schema: str | None = None) -> None:
+    async def push(  # type: ignore[override]
+        self, engine: AsyncEngine | None = None, schema: str | None = None
+    ) -> None:
         """
         Push all changes to the database (async version).
 
@@ -97,7 +99,10 @@ class AsyncTableDataFrame(TableDataFrame):
             DataValidationError: If primary key validation fails
             TransactionError: If any database operation fails
         """
-        from pandalchemy.async_operations import async_execute_plan, async_pull_table, _ensure_greenlet_context
+        from pandalchemy.async_operations import (
+            _ensure_greenlet_context,
+            async_execute_plan,
+        )
         from pandalchemy.exceptions import DataValidationError, SchemaError
         from pandalchemy.sql_operations import create_table_from_dataframe
 
@@ -135,7 +140,10 @@ class AsyncTableDataFrame(TableDataFrame):
             from sqlalchemy import create_engine
 
             sync_engine = create_engine(
-                str(engine_to_use.url).replace("+asyncpg", "").replace("+aiomysql", "").replace("+aiosqlite", "")
+                str(engine_to_use.url)
+                .replace("+asyncpg", "")
+                .replace("+aiomysql", "")
+                .replace("+aiosqlite", "")
             )
 
         if not table_exists(sync_engine, self.name, self.schema):
@@ -153,7 +161,7 @@ class AsyncTableDataFrame(TableDataFrame):
         # Refresh the table after successful push
         await self.pull()
 
-    async def pull(
+    async def pull(  # type: ignore[override]
         self, engine: AsyncEngine | None = None, schema: str | None = None
     ) -> None:
         """
@@ -163,7 +171,7 @@ class AsyncTableDataFrame(TableDataFrame):
             engine: Optional async engine to use
             schema: Optional schema to use
         """
-        from pandalchemy.async_operations import async_pull_table, _ensure_greenlet_context
+        from pandalchemy.async_operations import _ensure_greenlet_context, async_pull_table
         from pandalchemy.sql_operations import get_primary_key
 
         # Workaround: Ensure greenlet context before async operations
@@ -179,10 +187,13 @@ class AsyncTableDataFrame(TableDataFrame):
             # Get primary key if not set
             if self._primary_key is None:
                 # Use sync engine for introspection
-                from sqlalchemy import create_engine
+                from sqlalchemy import create_engine  # type: ignore[unreachable]
 
                 sync_engine = create_engine(
-                    str(self._async_engine.url).replace("+asyncpg", "").replace("+aiomysql", "").replace("+aiosqlite", "")
+                    str(self._async_engine.url)
+                    .replace("+asyncpg", "")
+                    .replace("+aiomysql", "")
+                    .replace("+aiosqlite", "")
                 )
                 self._primary_key = get_primary_key(sync_engine, self.name, self.schema)
                 if self._primary_key is None:
@@ -195,9 +206,7 @@ class AsyncTableDataFrame(TableDataFrame):
             object.__setattr__(self, "_data", data)
 
             # Reset tracker with fresh data
-            tracker = ChangeTracker(
-                self._primary_key, data, tracking_mode=self._tracking_mode
-            )
+            tracker = ChangeTracker(self._primary_key, data, tracking_mode=self._tracking_mode)
             object.__setattr__(self, "_tracker", tracker)
 
 
@@ -208,9 +217,7 @@ class AsyncDataBase:
     Manages multiple AsyncTableDataFrame objects with async push/pull operations.
     """
 
-    def __init__(
-        self, engine: AsyncEngine, lazy: bool = False, schema: str | None = None
-    ):
+    def __init__(self, engine: AsyncEngine, lazy: bool = False, schema: str | None = None):
         """
         Initialize an AsyncDataBase instance.
 
@@ -238,15 +245,18 @@ class AsyncDataBase:
         # Workaround: Ensure greenlet context before async operations
         # TODO: Remove this once pytest-green-light fixes greenlet context persistence
         await _ensure_greenlet_context()
-        
+
         # Clear existing tables
         self.db.clear()
 
         # Use sync engine for introspection (inspect doesn't have async support yet)
-        from sqlalchemy import create_engine, inspect
+        from sqlalchemy import create_engine
 
         sync_engine = create_engine(
-            str(self.engine.url).replace("+asyncpg", "").replace("+aiomysql", "").replace("+aiosqlite", "")
+            str(self.engine.url)
+            .replace("+asyncpg", "")
+            .replace("+aiomysql", "")
+            .replace("+aiosqlite", "")
         )
         inspector = inspect(sync_engine)
         table_names = inspector.get_table_names(schema=self.schema)
@@ -292,9 +302,7 @@ class AsyncDataBase:
         table_list = ", ".join(self.db.keys())
         return f"AsyncDataBase(tables=[{table_list}], url={self.engine.url})"
 
-    async def push(
-        self, parallel: bool = True, max_workers: int | None = None
-    ) -> None:
+    async def push(self, parallel: bool = True, _max_workers: int | None = None) -> None:
         """
         Push all table changes to the database (async version).
 
@@ -303,6 +311,7 @@ class AsyncDataBase:
             max_workers: Maximum number of parallel workers (None = auto-detect)
         """
         import asyncio
+
         from pandalchemy.async_operations import _ensure_greenlet_context
 
         # Workaround: Ensure greenlet context before async operations
@@ -330,18 +339,28 @@ class AsyncDataBase:
                         or len(tracker.altered_column_types) > 0
                     ):
                         should_push = True
-                
+
                 # Also push if table doesn't exist in database yet (new table)
-                if not should_push and hasattr(table, "_async_engine") and table._async_engine is not None and table.name:
-                    from pandalchemy.sql_operations import table_exists
+                if (
+                    not should_push
+                    and hasattr(table, "_async_engine")
+                    and table._async_engine is not None
+                    and table.name
+                ):
                     from sqlalchemy import create_engine
+
+                    from pandalchemy.sql_operations import table_exists
+
                     sync_engine = create_engine(
-                        str(table._async_engine.url).replace("+asyncpg", "").replace("+aiomysql", "").replace("+aiosqlite", "")
+                        str(table._async_engine.url)
+                        .replace("+asyncpg", "")
+                        .replace("+aiomysql", "")
+                        .replace("+aiosqlite", "")
                     )
                     if not table_exists(sync_engine, table.name, table.schema):
                         should_push = True
                     sync_engine.dispose()
-                
+
                 if should_push:
                     tables_with_changes[name] = table
 
@@ -355,6 +374,7 @@ class AsyncDataBase:
                     table.validate_primary_key()
                 except Exception as e:
                     from pandalchemy.exceptions import SchemaError
+
                     raise SchemaError(
                         f"Validation failed for table '{_table_name}': {str(e)}",
                         table_name=_table_name,
@@ -393,9 +413,7 @@ class AsyncDataBase:
         """Refresh all tables with current database data (async version)."""
         await self.load_tables()
 
-    async def add_table(
-        self, table: AsyncTableDataFrame, push: bool = False
-    ) -> None:
+    async def add_table(self, table: AsyncTableDataFrame, push: bool = False) -> None:
         """Add a new table to the database."""
         self.db[table.name] = table
         object.__setattr__(table, "db", self)
@@ -403,4 +421,3 @@ class AsyncDataBase:
         object.__setattr__(table, "schema", self.schema)
         if push:
             await self.push()
-

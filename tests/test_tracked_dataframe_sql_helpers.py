@@ -119,7 +119,7 @@ def test_update_row_single_pk(sample_df):
 def test_update_row_nonexistent_raises_error(sample_df):
     """Test update_row with nonexistent PK raises error."""
     from pandalchemy.exceptions import DataValidationError
-    
+
     tdf = TableDataFrame(data=sample_df, primary_key="id")
     with pytest.raises(DataValidationError, match="No row found"):
         tdf.update_row(999, {"age": 100})
@@ -141,7 +141,7 @@ def test_delete_row_single_pk(sample_df):
 def test_delete_row_nonexistent_raises_error(sample_df):
     """Test delete_row with nonexistent PK raises error."""
     from pandalchemy.exceptions import DataValidationError
-    
+
     tdf = TableDataFrame(data=sample_df, primary_key="id")
     with pytest.raises(DataValidationError, match="No row found"):
         tdf.delete_row(999)

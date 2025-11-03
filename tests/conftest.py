@@ -4,10 +4,10 @@ import asyncio
 import contextlib
 import os
 import tempfile
-from collections.abc import Generator
 
 import pytest
-from sqlalchemy import Engine, MetaData, create_engine, text
+from sqlalchemy import create_engine, text
+
 
 # Event loop fixture for async tests
 # Using session scope may help with SQLAlchemy async greenlet context
@@ -15,7 +15,7 @@ from sqlalchemy import Engine, MetaData, create_engine, text
 @pytest.fixture(scope="session")
 def event_loop():
     """Create a session-scoped event loop for async tests.
-    
+
     Session scope may help maintain greenlet context for SQLAlchemy async engines.
     """
     policy = asyncio.get_event_loop_policy()
@@ -82,18 +82,20 @@ _mysql_instances = {}
 def _postgres_session(request):
     """Session-scoped PostgreSQL instance per pytest-xdist worker."""
     import os
+
     worker_id = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
-    
+
     if worker_id not in _postgres_instances:
         try:
             from testing.postgresql import Postgresql
+
             _postgres_instances[worker_id] = Postgresql()
         except ImportError:
             pytest.skip("testing.postgresql not installed")
         except Exception as e:
             # If we can't create PostgreSQL (e.g., shared memory limit), skip
             pytest.skip(f"PostgreSQL not available: {e}")
-    
+
     yield _postgres_instances[worker_id]
 
 
@@ -101,29 +103,33 @@ def _postgres_session(request):
 def _mysql_session(request):
     """Session-scoped MySQL instance per pytest-xdist worker."""
     import os
+
     worker_id = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
-    
+
     if worker_id not in _mysql_instances:
         try:
             from testing.mysqld import Mysqld
+
             _mysql_instances[worker_id] = Mysqld()
         except ImportError:
             pytest.skip("testing.mysqld not installed")
         except Exception as e:
             # If we can't create MySQL, skip
             pytest.skip(f"MySQL not available: {e}")
-    
+
     yield _mysql_instances[worker_id]
 
 
 def _get_postgres_instance():
     """Lazy initialization of PostgreSQL instance."""
     import os
+
     worker_id = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
-    
+
     if worker_id not in _postgres_instances:
         try:
             from testing.postgresql import Postgresql
+
             _postgres_instances[worker_id] = Postgresql()
         except ImportError:
             pytest.skip("testing.postgresql not installed")
@@ -135,11 +141,13 @@ def _get_postgres_instance():
 def _get_mysql_instance():
     """Lazy initialization of MySQL instance."""
     import os
+
     worker_id = os.environ.get("PYTEST_XDIST_WORKER", "gw0")
-    
+
     if worker_id not in _mysql_instances:
         try:
             from testing.mysqld import Mysqld
+
             _mysql_instances[worker_id] = Mysqld()
         except ImportError:
             pytest.skip("testing.mysqld not installed")
@@ -151,43 +159,45 @@ def _get_mysql_instance():
 @pytest.fixture(autouse=True)
 def clean_database(db_engine):
     """Auto-use fixture that cleans database before each test.
-    
+
     Drops all tables in PostgreSQL/MySQL to ensure test isolation.
     """
     # Only clean PostgreSQL and MySQL (SQLite is already isolated)
     if db_engine.dialect.name in ("postgresql", "mysql"):
-        from sqlalchemy import inspect, MetaData
-        
+        from sqlalchemy import MetaData, inspect
+
         inspector = inspect(db_engine)
         table_names = inspector.get_table_names()
-        
+
         # Drop all tables
         if table_names:
             metadata = MetaData()
             metadata.reflect(bind=db_engine)
             with db_engine.begin() as conn:
                 metadata.drop_all(conn, checkfirst=True)
-        
+
         # Clean up sequences for PostgreSQL
         if db_engine.dialect.name == "postgresql":
             with db_engine.begin() as conn:
-                result = conn.execute(text("""
-                    SELECT sequence_name 
-                    FROM information_schema.sequences 
+                result = conn.execute(
+                    text("""
+                    SELECT sequence_name
+                    FROM information_schema.sequences
                     WHERE sequence_schema = 'public'
-                """))
+                """)
+                )
                 for row in result:
                     conn.execute(text(f'DROP SEQUENCE IF EXISTS "{row[0]}" CASCADE'))
-    
+
     yield
-    
+
     # Clean up after test too
     if db_engine.dialect.name in ("postgresql", "mysql"):
-        from sqlalchemy import inspect, MetaData
-        
+        from sqlalchemy import MetaData, inspect
+
         inspector = inspect(db_engine)
         table_names = inspector.get_table_names()
-        
+
         if table_names:
             metadata = MetaData()
             metadata.reflect(bind=db_engine)
@@ -198,7 +208,7 @@ def clean_database(db_engine):
 @pytest.fixture(params=DATABASE_TYPES)
 def db_engine(request):
     """Parametrized fixture for database engines.
-    
+
     Creates engines for SQLite, PostgreSQL, and MySQL based on availability.
     Tests are skipped if the database is not available.
     """

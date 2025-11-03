@@ -61,7 +61,7 @@ class RowChange:
 class RowState:
     """
     Represents the state of a row in incremental tracking.
-    
+
     Stores only changed values, not full row copies, for memory efficiency.
     """
 
@@ -124,27 +124,30 @@ class ChangeTracker:
         self._changes_computed: bool = False
         self._computation_needed: bool = True
 
+        # Initialize attributes that are used in both modes
+        self._original_index_set: set[Any] = self._extract_original_index(original_data)
+        self._changed_rows: dict[Any, RowState] = {}
+        self._original_data_stored: bool
+
         # Incremental tracking: store only changed rows, not full original DataFrame
         if tracking_mode == "incremental":
-            self._original_index_set: set[Any] = self._extract_original_index(original_data)
             # In incremental mode, we still need original_data for comparison in compute_row_changes
             # But we can optimize by storing it temporarily and clearing after first computation
             # For now, store a lightweight reference that can be garbage collected
-            self._original_data: pd.DataFrame | None = original_data.copy()  # Temporary, for comparison
-            self._changed_rows: dict[Any, RowState] = {}
-            self._original_data_stored: bool = False  # Track if we've done first computation
+            self._original_data: pd.DataFrame | None = (
+                original_data.copy()
+            )  # Temporary, for comparison
+            self._original_data_stored = False  # Track if we've done first computation
         else:
             # Full mode: store complete original DataFrame (backward compatible)
             self._original_data = original_data.copy()
-            self._original_index_set: set[Any] = self._extract_original_index(original_data)
-            self._changed_rows: dict[Any, RowState] = {}
-            self._original_data_stored: bool = True
+            self._original_data_stored = True
 
     @property
     def original_data(self) -> pd.DataFrame | None:
         """
         Access original data for backward compatibility.
-        
+
         In incremental mode, returns None as we don't store full original DataFrame.
         In full mode, returns the stored original DataFrame.
         """
@@ -155,15 +158,15 @@ class ChangeTracker:
     ) -> dict[str, Any] | None:
         """
         Get original row data for a primary key value.
-        
+
         In incremental mode, retrieves from stored RowState if changed, otherwise
         from the original_data parameter if provided.
         In full mode, retrieves from stored original_data.
-        
+
         Args:
             pk_value: Primary key value
             original_data: Optional DataFrame to extract row from (used in incremental mode)
-            
+
         Returns:
             Dictionary of original row data, or None if not available
         """
@@ -186,16 +189,16 @@ class ChangeTracker:
     def _extract_row_from_df(self, df: pd.DataFrame, pk_value: Any) -> dict[str, Any] | None:
         """
         Extract a row from DataFrame by primary key value.
-        
+
         Args:
             df: DataFrame to search
             pk_value: Primary key value
-            
+
         Returns:
             Dictionary of row data, or None if not found
         """
         pk_cols = normalize_primary_key(self.primary_key)
-        
+
         if len(pk_cols) == 1:
             # Single column PK
             pk_col = pk_cols[0]
@@ -217,11 +220,11 @@ class ChangeTracker:
                 condition = df.index == pk_value
             else:
                 return None
-        
-        if hasattr(condition, 'any') and not condition.any():
+
+        if hasattr(condition, "any") and not condition.any():
             return None
-        
-        matching_rows = df[condition] if hasattr(condition, 'any') else df.loc[condition]
+
+        matching_rows = df[condition] if hasattr(condition, "any") else df.loc[condition]
         if len(matching_rows) > 0:
             return matching_rows.iloc[0].to_dict()
         return None
@@ -239,7 +242,7 @@ class ChangeTracker:
         Returns:
             Set of primary key values (tuples for composite keys)
         """
-        from pandalchemy.pk_utils import extract_pk_values, normalize_primary_key
+        from pandalchemy.pk_utils import extract_pk_values
 
         return extract_pk_values(data, self.primary_key)
 
@@ -424,7 +427,7 @@ class ChangeTracker:
             changed_columns: set[str] = set()
             old_values: dict[str, Any] = {}
             new_values: dict[str, Any] = {}
-            
+
             try:
                 if not current_row.equals(original_row):
                     # Handle NaN comparisons and track only changed columns
@@ -474,7 +477,7 @@ class ChangeTracker:
                         old_values=original_row.to_dict(),  # type: ignore[arg-type]
                         new_values=current_row.to_dict(),  # type: ignore[arg-type]
                     )
-        
+
         # In incremental mode, store RowState for inserts and deletes too
         if self.tracking_mode == "incremental":
             for key in inserted_keys:
@@ -499,7 +502,7 @@ class ChangeTracker:
                 # Keep it for now - we might need it for subsequent comparisons
                 # Can optimize further by clearing after ensuring all needed data is in _changed_rows
                 self._original_data_stored = True
-        
+
         # Mark changes as computed
         self._changes_computed = True
         self._computation_needed = False
@@ -532,7 +535,7 @@ class ChangeTracker:
         # Compute row changes if current data provided and computation needed
         if current_data is not None and self._computation_needed:
             self.compute_row_changes(current_data)
-        
+
         return (
             len(self.row_changes) > 0
             or len(self.added_columns) > 0
@@ -558,11 +561,11 @@ class ChangeTracker:
 
         # Use same extraction logic as __init__ - handles both single and composite keys
         self.original_index = self._extract_original_index(new_data)
-        
+
         # Reset lazy computation flags
         self._changes_computed = False
         self._computation_needed = True
-        
+
         # Reset tracking data based on mode
         if self.tracking_mode == "incremental":
             self._original_index_set = self._extract_original_index(new_data)

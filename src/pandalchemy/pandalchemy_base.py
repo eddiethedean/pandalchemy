@@ -122,7 +122,7 @@ class DataBase(IDataBase):
         table_list = ", ".join(self.db.keys())
         return f"DataBase(tables=[{table_list}], url={self.engine.url})"
 
-    def push(self, parallel: bool = True, max_workers: int | None = None) -> None:
+    def push(self, parallel: bool = True, _max_workers: int | None = None) -> None:
         """
         Push all table changes to the database.
 
@@ -133,29 +133,28 @@ class DataBase(IDataBase):
         Args:
             parallel: If True, execute independent tables in parallel (default True)
             max_workers: Maximum number of parallel workers (None = auto-detect CPU count)
-        
+
         Note:
             All changes across all tables are executed within transactions.
             If any operation fails, all changes are rolled back.
-            
+
             Note: SQLite does not support multi-threaded writes, so parallel
             execution is automatically disabled for SQLite databases.
         """
-        from concurrent.futures import ThreadPoolExecutor, as_completed
-        
+
         # SQLite doesn't support multi-threaded writes - disable parallel for SQLite
         if self.engine.dialect.name == "sqlite":
             parallel = False
-        
+
         # Get tables that need to be pushed
         # Build list of tables with changes AND all tables for validation
         tables_with_changes = {}
         all_tables_for_validation = {}
-        
+
         for name, table in self.db.items():
             if table is not None and hasattr(table, "push"):
                 all_tables_for_validation[name] = table
-                
+
                 # Check if table has changes to push
                 should_push = False
                 if hasattr(table, "has_changes") and table.has_changes():
@@ -169,13 +168,13 @@ class DataBase(IDataBase):
                         or len(tracker.altered_column_types) > 0
                     ):
                         should_push = True
-                
+
                 if should_push:
                     tables_with_changes[name] = table
-        
+
         # Use tables_with_changes for pushing, but validate all tables
         tables_to_push = tables_with_changes
-        
+
         # If parallel execution is disabled or only one table, use sequential execution
         # This ensures all changes happen in a single transaction for atomicity
         if not parallel or len(tables_to_push) <= 1:
@@ -186,102 +185,23 @@ class DataBase(IDataBase):
                 if hasattr(table, "validate_primary_key"):
                     try:
                         table.validate_primary_key()
-                    except Exception as e:
+                    except Exception:
                         # Re-raise validation errors immediately, before transaction
                         raise
-        
+
         # After validation, if no tables have changes, we're done
         if not tables_to_push:
             return
-        
+
         # Execute all pushes within a single transaction
         try:
             with self.engine.begin() as connection:
                 for _table_name, table in tables_to_push.items():
                     table._push_with_connection(connection)
-        except Exception as e:
+        except Exception:
             # Transaction will auto-rollback, but we need to re-raise the error
             raise
-        
-        # Refresh all tables after successful push
-        self._load_tables()
-        return
-        
-        # For parallel execution, we need to identify independent tables
-        # Since we don't have FK dependency detection yet, we'll use a simpler approach:
-        # Each table gets its own transaction in parallel (they're truly independent)
-        # Tables with schema changes are executed sequentially first
-        
-        # Separate tables with schema changes (must execute sequentially first)
-        schema_change_tables = []
-        data_change_tables = []
-        
-        for name, table in tables_to_push.items():
-            if hasattr(table, "_tracker"):
-                tracker = table._tracker
-                # Check if there are schema changes
-                has_schema_changes = (
-                    len(tracker.added_columns) > 0
-                    or len(tracker.dropped_columns) > 0
-                    or len(tracker.renamed_columns) > 0
-                    or len(tracker.altered_column_types) > 0
-                )
-                if has_schema_changes:
-                    schema_change_tables.append((name, table))
-                else:
-                    data_change_tables.append((name, table))
-            else:
-                # If we can't detect schema changes, treat as data-only
-                data_change_tables.append((name, table))
-        
-        # Execute schema changes sequentially first (they're fast and need to avoid conflicts)
-        # Use single transaction for schema changes to maintain atomicity
-        if schema_change_tables:
-            with self.engine.begin() as connection:
-                for name, table in schema_change_tables:
-                    table._push_with_connection(connection)
-        
-        # Execute data changes in parallel (each table in its own transaction)
-        if data_change_tables:
-            if max_workers is None:
-                import os
-                max_workers = min(len(data_change_tables), (os.cpu_count() or 1))
-            
-            def push_table(table: TableDataFrame) -> tuple[str, bool, Exception | None]:
-                """Push a single table and return result."""
-                try:
-                    table.push()
-                    return (table.name, True, None)
-                except Exception as e:
-                    return (table.name, False, e)
-            
-            # Execute in parallel
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                futures = {
-                    executor.submit(push_table, table): (name, table)
-                    for name, table in data_change_tables
-                }
-                
-                errors: list[tuple[str, Exception]] = []
-                for future in as_completed(futures):
-                    name, table = futures[future]
-                    try:
-                        result_name, success, error = future.result()
-                        if not success and error is not None:
-                            errors.append((result_name, error))
-                    except Exception as e:
-                        errors.append((name, e))
-            
-            # If any errors occurred, raise an aggregate error
-            if errors:
-                from pandalchemy.exceptions import TransactionError
-                
-                error_messages = [f"{name}: {str(e)}" for name, e in errors]
-                raise TransactionError(
-                    f"Failed to push {len(errors)} table(s): " + "; ".join(error_messages),
-                    details={"failed_tables": [name for name, _ in errors]},
-                )
-        
+
         # Refresh all tables after successful push
         self._load_tables()
 

@@ -26,6 +26,7 @@ def test_cli_version(capsys):
     captured = capsys.readouterr()
     output = captured.out + captured.err
     from pandalchemy._version import version
+
     assert version in output
 
 
@@ -45,6 +46,7 @@ def test_info_command(capsys):
     captured = capsys.readouterr()
     assert "Pandalchemy Version" in captured.out
     from pandalchemy._version import version
+
     assert version in captured.out
     assert "Features:" in captured.out
 

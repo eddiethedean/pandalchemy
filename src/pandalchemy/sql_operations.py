@@ -26,21 +26,21 @@ from pandalchemy.utils import (
 # Adaptive batch size configuration
 # These values can be adjusted based on database type and connection performance
 DEFAULT_BATCH_SIZE_INSERT = 1000  # Insert batch size
-DEFAULT_BATCH_SIZE_UPDATE = 500   # Update batch size (smaller due to WHERE clauses)
+DEFAULT_BATCH_SIZE_UPDATE = 500  # Update batch size (smaller due to WHERE clauses)
 DEFAULT_BATCH_SIZE_DELETE = 1000  # Delete batch size
 
 
 def _calculate_batch_size(operation_type: OperationType, record_count: int) -> int:
     """
     Calculate optimal batch size based on operation type and record count.
-    
+
     Uses adaptive sizing: smaller batches for very large operations,
     larger batches for small operations to reduce round trips.
-    
+
     Args:
         operation_type: Type of operation (INSERT, UPDATE, DELETE)
         record_count: Total number of records to process
-        
+
     Returns:
         Optimal batch size for chunking
     """
@@ -77,11 +77,11 @@ def _calculate_batch_size(operation_type: OperationType, record_count: int) -> i
 def _chunk_list(items: list[Any], chunk_size: int) -> list[list[Any]]:
     """
     Split a list into chunks of specified size.
-    
+
     Args:
         items: List to chunk
         chunk_size: Size of each chunk
-        
+
     Returns:
         List of chunks
     """
@@ -504,10 +504,10 @@ def _execute_deletes(
 
     # Calculate optimal batch size
     batch_size = _calculate_batch_size(OperationType.DELETE, len(clean_keys))
-    
+
     # Chunk deletes into batches
     chunks = _chunk_list(clean_keys, batch_size)
-    
+
     # Build a minimal Table object with just the primary key column(s)
     # We know the primary key name(s) from the parameter, so we don't need inspect
     # Use Integer as a generic type - SQLAlchemy will handle the actual comparison
@@ -542,7 +542,9 @@ def _execute_deletes(
         for chunk in chunks:
             for key_value in chunk:
                 if isinstance(key_value, (tuple, list)) and len(key_value) == len(primary_key):
-                    conditions = [table.c[pk_col] == val for pk_col, val in zip(primary_key, key_value)]
+                    conditions = [
+                        table.c[pk_col] == val for pk_col, val in zip(primary_key, key_value)
+                    ]
                     stmt = table.delete().where(and_(*conditions))
                     connection.execute(stmt)
 
@@ -569,7 +571,7 @@ def _execute_updates(
 
     # Calculate optimal batch size
     batch_size = _calculate_batch_size(OperationType.UPDATE, len(update_records))
-    
+
     # Chunk updates into batches
     chunks = _chunk_list(update_records, batch_size)
 
@@ -658,7 +660,7 @@ def _execute_inserts(
 
     # Calculate optimal batch size
     batch_size = _calculate_batch_size(OperationType.INSERT, len(clean_records))
-    
+
     # Chunk inserts into batches
     chunks = _chunk_list(clean_records, batch_size)
 

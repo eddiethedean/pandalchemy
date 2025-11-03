@@ -4,7 +4,7 @@
 
 Work with database tables as pandas DataFrames while pandalchemy automatically tracks changes and syncs to your database with optimized SQL operations.
 
-[![Tests](https://img.shields.io/badge/tests-453%20passing-brightgreen)](https://github.com/eddiethedean/pandalchemy)
+[![Tests](https://img.shields.io/badge/tests-973%20passing-brightgreen)](https://github.com/eddiethedean/pandalchemy)
 [![Type Checked](https://img.shields.io/badge/mypy-passing-blue)](https://github.com/eddiethedean/pandalchemy)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org)
 
@@ -809,7 +809,18 @@ Built with:
 
 ## Version History
 
-### 1.2.0 (Latest) 🎉
+### 1.3.0 (Latest) 🎉
+- **AsyncIO Support**: Full async/await support with `AsyncDataBase` and `AsyncTableDataFrame` classes for async database operations
+- **Enhanced Error Handling**: Detailed error context with error codes, suggested fixes, and structured error information
+- **Memory Optimization**: Incremental change tracking mode to reduce memory usage for large datasets
+- **Lazy Change Computation**: Changes are computed only when needed (on `has_changes()`, `get_changes_summary()`, or `push()`)
+- **Conflict Resolution**: Configurable conflict resolution strategies (last_writer_wins, first_writer_wins, abort, merge, custom) for concurrent modifications
+- **Adaptive Batch Sizing**: Dynamic batch sizing for SQL operations based on operation type and record count for optimal performance
+- **Improved Validation**: Comprehensive validation before transactions to catch schema errors early
+- **Code Quality**: All ruff checks passing (0 errors), all mypy checks passing (0 errors), full code formatting compliance
+- **Testing**: 973 tests passing with comprehensive PostgreSQL and MySQL test infrastructure
+
+### 1.2.0
 - **Dependency Upgrades**: Upgraded to fullmetalalchemy 2.4.0 and transmutation 1.1.0 for improved SQL operations and schema evolution
 - **Code Modernization**: Replaced all SQLAlchemy Core API usage with fullmetalalchemy functions for consistency and better abstraction
 - **Type Safety**: Added fast type checking with `ty` (Rust-based type checker) and fixed all type issues for better code quality

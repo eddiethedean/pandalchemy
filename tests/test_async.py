@@ -7,7 +7,6 @@ The pytest-green-light plugin automatically establishes greenlet context for SQL
 async engines, allowing these tests to run without MissingGreenlet errors.
 """
 
-import asyncio
 import contextlib
 import os
 import tempfile
@@ -16,10 +15,10 @@ import pandas as pd
 import pytest
 
 try:
-    from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-    from pandalchemy import AsyncDataBase, AsyncTableDataFrame
     import pytest_asyncio
-    import greenlet
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    from pandalchemy import AsyncDataBase, AsyncTableDataFrame
 
     ASYNC_AVAILABLE = True
 except ImportError:
@@ -36,13 +35,17 @@ def sqlite_async_db_path():
     """Create a temporary database file path for async tests."""
     if not ASYNC_AVAILABLE:
         pytest.skip("Async drivers not available")
-    
-    # Check if aiosqlite is available
+
+    # Check if aiosqlite is available (import check only)
     try:
-        import aiosqlite
-    except ImportError:
+        import importlib.util
+
+        spec = importlib.util.find_spec("aiosqlite")
+        if spec is None:
+            pytest.skip("aiosqlite not installed - async tests require: pip install aiosqlite")
+    except Exception:
         pytest.skip("aiosqlite not installed - async tests require: pip install aiosqlite")
-    
+
     # Create a temporary file
     fd, path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
@@ -54,13 +57,13 @@ def sqlite_async_db_path():
 # Helper function to create async engine in test context
 async def _create_async_engine(db_path: str):
     """Helper to create async engine within test async context.
-    
+
     Creates engine with lazy connection - actual connection happens on first use.
     Note: pytest-green-light should establish greenlet context via its autouse fixture,
     but if it doesn't work, we establish it here as a workaround.
     """
     from sqlalchemy.pool import NullPool
-    
+
     # Workaround: Establish greenlet context right before engine operations
     # This is needed because pytest-green-light's fixture may not establish
     # context in the right async task context for SQLAlchemy's connection logic
@@ -71,7 +74,7 @@ async def _create_async_engine(db_path: str):
             from sqlalchemy.util import greenlet_spawn
         except ImportError:
             greenlet_spawn = None
-    
+
     # Create engine with connect_args to configure aiosqlite
     engine = create_async_engine(
         f"sqlite+aiosqlite:///{db_path}",
@@ -82,14 +85,16 @@ async def _create_async_engine(db_path: str):
         connect_args={"check_same_thread": False},
         future=True,
     )
-    
+
     # Establish greenlet context right before first connection
     # This ensures it's in the same async context as the connection
     if greenlet_spawn is not None:
+
         def _noop() -> None:
             pass
+
         await greenlet_spawn(_noop)
-    
+
     return engine
 
 
@@ -103,7 +108,7 @@ async def test_async_database_initialization(sqlite_async_db_path):
     """Test AsyncDataBase initialization."""
     if not ASYNC_AVAILABLE:
         pytest.skip("Async drivers not available")
-    
+
     # pytest-green-light automatically establishes greenlet context
     # but we also establish it here as a workaround since the plugin's
     # fixture context doesn't persist to the test's async context
@@ -112,7 +117,7 @@ async def test_async_database_initialization(sqlite_async_db_path):
         db = AsyncDataBase(engine)
         # load_tables() will establish greenlet context internally
         await db.load_tables()
-        
+
         assert len(db) == 0
         assert isinstance(db, AsyncDataBase)
     finally:
@@ -123,13 +128,13 @@ async def test_async_table_creation_and_push(sqlite_async_db_path, sample_data):
     """Test creating a table and pushing it."""
     if not ASYNC_AVAILABLE:
         pytest.skip("Async drivers not available")
-    
+
     # pytest-green-light automatically establishes greenlet context
     engine = await _create_async_engine(sqlite_async_db_path)
     try:
         db = AsyncDataBase(engine)
         await db.load_tables()
-        
+
         # Create table
         table = AsyncTableDataFrame(
             name="users",
@@ -138,10 +143,10 @@ async def test_async_table_creation_and_push(sqlite_async_db_path, sample_data):
             engine=engine,
             db=db,
         )
-        
+
         db["users"] = table
         await table.push()
-        
+
         # Refresh and verify
         await db.load_tables()
         assert "users" in db
@@ -155,13 +160,13 @@ async def test_async_table_modification_and_push(sqlite_async_db_path, sample_da
     """Test modifying a table and pushing changes."""
     if not ASYNC_AVAILABLE:
         pytest.skip("Async drivers not available")
-    
+
     # pytest-green-light automatically establishes greenlet context
     engine = await _create_async_engine(sqlite_async_db_path)
     try:
         db = AsyncDataBase(engine)
         await db.load_tables()
-        
+
         # Create and push initial table
         table = AsyncTableDataFrame(
             name="users",
@@ -172,14 +177,14 @@ async def test_async_table_modification_and_push(sqlite_async_db_path, sample_da
         )
         db["users"] = table
         await table.push()
-        
+
         # Modify table
         db["users"].update_row(1, {"age": 26})
         db["users"].update_row(2, {"name": "Robert"})
-        
+
         # Push changes
         await db.push()
-        
+
         # Verify changes
         await db.load_tables()
         assert db["users"].get_row(1)["age"] == 26
@@ -188,18 +193,17 @@ async def test_async_table_modification_and_push(sqlite_async_db_path, sample_da
         await engine.dispose()
 
 
-
 async def test_async_table_pull(sqlite_async_db_path, sample_data):
     """Test pulling table data from database."""
     if not ASYNC_AVAILABLE:
         pytest.skip("Async drivers not available")
-    
+
     # pytest-green-light automatically establishes greenlet context
     engine = await _create_async_engine(sqlite_async_db_path)
     try:
         db = AsyncDataBase(engine)
         await db.load_tables()
-        
+
         # Create and push initial table
         table = AsyncTableDataFrame(
             name="users",
@@ -210,16 +214,16 @@ async def test_async_table_pull(sqlite_async_db_path, sample_data):
         )
         db["users"] = table
         await table.push()
-        
+
         # Modify directly in database (using sync connection for simplicity)
         from sqlalchemy import create_engine, text
-        
+
         sync_url = str(engine.url).replace("+aiosqlite", "")
         sync_engine = create_engine(sync_url)
         with sync_engine.begin() as conn:
             conn.execute(text("UPDATE users SET age = 100 WHERE id = 1"))
         sync_engine.dispose()
-        
+
         # Pull and verify
         await db["users"].pull()
         assert db["users"].get_row(1)["age"] == 100
@@ -227,18 +231,17 @@ async def test_async_table_pull(sqlite_async_db_path, sample_data):
         await engine.dispose()
 
 
-
 async def test_async_insert_and_delete(sqlite_async_db_path, sample_data):
     """Test inserting and deleting rows."""
     if not ASYNC_AVAILABLE:
         pytest.skip("Async drivers not available")
-    
+
     # pytest-green-light automatically establishes greenlet context
     engine = await _create_async_engine(sqlite_async_db_path)
     try:
         db = AsyncDataBase(engine)
         await db.load_tables()
-        
+
         # Create and push initial table
         table = AsyncTableDataFrame(
             name="users",
@@ -249,16 +252,16 @@ async def test_async_insert_and_delete(sqlite_async_db_path, sample_data):
         )
         db["users"] = table
         await table.push()
-        
+
         # Add new row
         db["users"].add_row({"id": 4, "name": "David", "age": 40})
-        
+
         # Delete a row
         db["users"].delete_row(2)
-        
+
         # Push changes
         await db.push()
-        
+
         # Verify
         await db.load_tables()
         assert len(db["users"]) == 3  # 4 total - 1 deleted = 3
@@ -268,18 +271,17 @@ async def test_async_insert_and_delete(sqlite_async_db_path, sample_data):
         await engine.dispose()
 
 
-
 async def test_async_database_push_parallel(sqlite_async_db_path, sample_data):
     """Test parallel push operations for multiple tables."""
     if not ASYNC_AVAILABLE:
         pytest.skip("Async drivers not available")
-    
+
     # pytest-green-light automatically establishes greenlet context
     engine = await _create_async_engine(sqlite_async_db_path)
     try:
         db = AsyncDataBase(engine)
         await db.load_tables()
-        
+
         # Create multiple tables
         table1 = AsyncTableDataFrame(
             name="users1",
@@ -295,13 +297,13 @@ async def test_async_database_push_parallel(sqlite_async_db_path, sample_data):
             engine=engine,
             db=db,
         )
-        
+
         db["users1"] = table1
         db["users2"] = table2
-        
+
         # Push both tables
         await db.push(parallel=True)
-        
+
         # Verify both tables exist
         await db.load_tables()
         assert "users1" in db
@@ -312,18 +314,17 @@ async def test_async_database_push_parallel(sqlite_async_db_path, sample_data):
         await engine.dispose()
 
 
-
 async def test_async_table_with_conflict_resolution(sqlite_async_db_path, sample_data):
     """Test conflict resolution with async operations."""
     if not ASYNC_AVAILABLE:
         pytest.skip("Async drivers not available")
-    
+
     # pytest-green-light automatically establishes greenlet context
     engine = await _create_async_engine(sqlite_async_db_path)
     try:
         db = AsyncDataBase(engine)
         await db.load_tables()
-        
+
         # Create table with last_writer_wins strategy
         table = AsyncTableDataFrame(
             name="users",
@@ -335,22 +336,22 @@ async def test_async_table_with_conflict_resolution(sqlite_async_db_path, sample
         )
         db["users"] = table
         await table.push()
-        
+
         # Modify locally
         db["users"].update_row(1, {"age": 99})
-        
+
         # Modify in database directly (simulating concurrent modification)
         from sqlalchemy import create_engine, text
-        
+
         sync_url = str(engine.url).replace("+aiosqlite", "")
         sync_engine = create_engine(sync_url)
         with sync_engine.begin() as conn:
             conn.execute(text("UPDATE users SET age = 88 WHERE id = 1"))
         sync_engine.dispose()
-        
+
         # Push should resolve conflict (last_writer_wins)
         await db["users"].push()
-        
+
         # Verify our local change won
         await db["users"].pull()
         assert db["users"].get_row(1)["age"] == 99
@@ -358,18 +359,17 @@ async def test_async_table_with_conflict_resolution(sqlite_async_db_path, sample
         await engine.dispose()
 
 
-
 async def test_async_table_dataframe_pandas_operations(sqlite_async_db_path, sample_data):
     """Test that AsyncTableDataFrame supports all pandas operations."""
     if not ASYNC_AVAILABLE:
         pytest.skip("Async drivers not available")
-    
+
     # pytest-green-light automatically establishes greenlet context
     engine = await _create_async_engine(sqlite_async_db_path)
     try:
         db = AsyncDataBase(engine)
         await db.load_tables()
-        
+
         table = AsyncTableDataFrame(
             name="users",
             data=sample_data,
@@ -379,20 +379,18 @@ async def test_async_table_dataframe_pandas_operations(sqlite_async_db_path, sam
         )
         db["users"] = table
         await table.push()
-        
+
         # Test pandas operations (should work synchronously)
         assert len(db["users"]) == 3
         assert "name" in db["users"].columns
         assert db["users"].loc[1, "name"] == "Alice"
-        
+
         # Test filtering
         filtered = db["users"][db["users"]["age"] > 28]
         assert len(filtered) == 2
-        
+
         # Test assignment
         db["users"].loc[1, "age"] = 27
         assert db["users"].loc[1, "age"] == 27
     finally:
         await engine.dispose()
-
-

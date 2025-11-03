@@ -11,28 +11,28 @@ from typing import Any
 
 import pandas as pd
 from sqlalchemy import inspect
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.sql import text
 
 from pandalchemy.exceptions import TransactionError
 from pandalchemy.execution_plan import ExecutionPlan, OperationType
-from pandalchemy.utils import convert_numpy_types, convert_records_list, pandas_dtype_to_python_type
+from pandalchemy.utils import convert_numpy_types, convert_records_list
 
 
 async def _ensure_greenlet_context() -> None:
     """
     Ensure greenlet context is established before async database operations.
-    
+
     This is needed for SQLAlchemy async engines (especially aiosqlite) which
     require greenlet context to be established in the same async context where
     connections are made. This function should be called right before any
     `async with engine.begin()` or similar connection operations.
-    
+
     NOTE: This is a workaround for pytest-green-light not properly persisting
     greenlet context from its fixture to the test's async context. Once
     pytest-green-light is fixed to establish context in the same async context
     where operations run, this can be removed.
-    
+
     See: GREENLET_CONTEXT_ISSUE.md in pytest-green-light repository
     """
     try:
@@ -42,10 +42,12 @@ async def _ensure_greenlet_context() -> None:
             from sqlalchemy.util import greenlet_spawn
         except ImportError:
             return  # greenlet_spawn not available, skip
-    
+
     if greenlet_spawn is not None:
+
         def _noop() -> None:
             pass
+
         await greenlet_spawn(_noop)
 
 
@@ -185,9 +187,12 @@ async def async_execute_plan(
     # For now, we'll execute them synchronously via sync engine if needed
     # This is a limitation - transmutation doesn't have async support yet
     from sqlalchemy import create_engine
+
     from pandalchemy.sql_operations import _execute_schema_change
 
-    sync_engine = create_engine(str(engine.url).replace("+asyncpg", "").replace("+aiomysql", "").replace("+aiosqlite", ""))
+    sync_engine = create_engine(
+        str(engine.url).replace("+asyncpg", "").replace("+aiomysql", "").replace("+aiosqlite", "")
+    )
     for step in schema_changes:
         _execute_schema_change(sync_engine, table_name, step.data, schema)
 
@@ -195,7 +200,7 @@ async def async_execute_plan(
     if data_changes:
         # Ensure greenlet context is established before connection
         await _ensure_greenlet_context()
-        
+
         async with engine.begin() as connection:
             try:
                 for step in data_changes:
@@ -243,9 +248,7 @@ async def _async_execute_deletes(
         table = Table(table_name, metadata, *pk_cols, schema=schema)
         for key_value in clean_keys:
             if isinstance(key_value, (tuple, list)) and len(key_value) == len(primary_key):
-                conditions = [
-                    table.c[pk_col] == val for pk_col, val in zip(primary_key, key_value)
-                ]
+                conditions = [table.c[pk_col] == val for pk_col, val in zip(primary_key, key_value)]
                 stmt = table.delete().where(and_(*conditions))
                 await connection.execute(stmt)
 
@@ -261,24 +264,22 @@ async def _async_execute_updates(
     if not update_records or not primary_key:
         return
 
-    from sqlalchemy import Column, Integer, MetaData, Table, and_, inspect
+    from sqlalchemy import Column, MetaData, Table, and_
 
     # Get column info using sync engine (inspector doesn't support async yet)
     # Use the connection's engine - for async connections, get the async engine
-    if hasattr(connection, "engine"):
-        engine_for_inspect = connection.engine
-    else:
-        engine_for_inspect = connection
-    
+    engine_for_inspect = connection.engine if hasattr(connection, "engine") else connection
+
     # Convert async engine URL to sync
     from sqlalchemy import create_engine
+
     engine_url = str(engine_for_inspect.url)
     sync_url = engine_url.replace("+asyncpg", "").replace("+aiomysql", "").replace("+aiosqlite", "")
     sync_engine = create_engine(sync_url)
-    
+
     inspector = inspect(sync_engine)
     columns_info = inspector.get_columns(table_name, schema=schema)
-    
+
     # Build table structure from column info
     metadata = MetaData()
     columns = []
@@ -289,10 +290,7 @@ async def _async_execute_updates(
 
     table = Table(table_name, metadata, *columns, schema=schema)
 
-    if isinstance(primary_key, str):
-        pk_cols = [primary_key]
-    else:
-        pk_cols = list(primary_key)
+    pk_cols = [primary_key] if isinstance(primary_key, str) else list(primary_key)
 
     for record in update_records:
         if len(pk_cols) == 1:
@@ -338,7 +336,7 @@ async def _async_execute_inserts(
     if not insert_records:
         return
 
-    from sqlalchemy import Column, MetaData, Table, insert, inspect
+    from sqlalchemy import Column, MetaData, Table, insert
 
     clean_records = convert_records_list(insert_records)
 
@@ -346,17 +344,15 @@ async def _async_execute_inserts(
         return
 
     # Get table structure using sync engine for introspection
-    if hasattr(connection, "engine"):
-        engine_for_inspect = connection.engine
-    else:
-        engine_for_inspect = connection
-    
+    engine_for_inspect = connection.engine if hasattr(connection, "engine") else connection
+
     # Convert async engine URL to sync
     from sqlalchemy import create_engine
+
     engine_url = str(engine_for_inspect.url)
     sync_url = engine_url.replace("+asyncpg", "").replace("+aiomysql", "").replace("+aiosqlite", "")
     sync_engine = create_engine(sync_url)
-    
+
     inspector = inspect(sync_engine)
     columns_info = inspector.get_columns(table_name, schema=schema)
 
@@ -371,4 +367,3 @@ async def _async_execute_inserts(
 
     # Execute inserts
     await connection.execute(insert(table), clean_records)
-

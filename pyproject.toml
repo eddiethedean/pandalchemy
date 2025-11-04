@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pandalchemy"
-version = "1.3.0"
+version = "1.4.0"
 description = "A package that integrates pandas and sqlalchemy with change tracking and optimized SQL operations."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -31,7 +31,6 @@ dependencies = [
     "fullmetalalchemy>=2.4.0",
     "transmutation>=1.1.0",
     "numpy>=1.20.0",
-    "tabulate>=0.8.0"
 ]
 
 [project.optional-dependencies]
@@ -39,7 +38,6 @@ dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
     "pytest-asyncio>=0.21.0",
-    "pytest-async-sqlalchemy>=0.2.0",
     "pytest-green-light>=0.2.0",
     "pytest-xdist>=3.0.0",
     "black>=23.0.0",
@@ -143,3 +141,12 @@ warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true
 check_untyped_defs = true
+
+[tool.ty]
+# Suppress false positives:
+# - asyncio.timeout exists in Python 3.11+ but ty stubs may not have it
+# - func.__name__ is a standard attribute on function objects
+# - External packages not installed in ty environment
+[tool.ty.rules]
+unresolved-attribute = "ignore"
+unresolved-import = "ignore"

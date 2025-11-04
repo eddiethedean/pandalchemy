@@ -3,10 +3,20 @@
 import asyncio
 import contextlib
 import os
+import pathlib
 import tempfile
 
 import pytest
 from sqlalchemy import create_engine, text
+
+# Add project bin directory to PATH for MySQL compatibility wrapper
+# This allows mysql_install_db wrapper to be found for MySQL 8.0+
+_project_root = pathlib.Path(__file__).parent.parent
+_bin_dir = _project_root / "bin"
+if _bin_dir.exists():
+    _bin_path = str(_bin_dir.absolute())
+    if _bin_path not in os.environ.get("PATH", ""):
+        os.environ["PATH"] = f"{_bin_path}:{os.environ.get('PATH', '')}"
 
 
 # Event loop fixture for async tests
@@ -35,41 +45,43 @@ def temp_db_path():
 
 
 # Database type parameterization
-DATABASE_TYPES = ["sqlite", "postgres", "mysql"]
+# Dynamically determine available databases
+def _get_available_databases():
+    """Get list of available database types for testing."""
+    available = ["sqlite"]  # SQLite is always available
 
-
-def _is_postgres_available() -> bool:
-    """Check if PostgreSQL is available for testing."""
-    postgres_url = os.environ.get("TEST_POSTGRES_URL")
-    if not postgres_url:
-        return False
+    # Check PostgreSQL
     try:
-        from sqlalchemy import create_engine
+        from testing.postgresql import Postgresql
 
-        engine = create_engine(postgres_url)
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
-        engine.dispose()
-        return True
-    except Exception:
-        return False
+        # Try to create a test instance (will fail if not possible)
+        try:
+            test_pg = Postgresql()
+            test_pg.stop()
+            available.append("postgres")
+        except Exception:
+            pass  # PostgreSQL not available, skip it
+    except ImportError:
+        pass  # testing.postgresql not installed
 
-
-def _is_mysql_available() -> bool:
-    """Check if MySQL is available for testing."""
-    mysql_url = os.environ.get("TEST_MYSQL_URL")
-    if not mysql_url:
-        return False
+    # Check MySQL
     try:
-        from sqlalchemy import create_engine
+        from testing.mysqld import Mysqld
 
-        engine = create_engine(mysql_url)
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
-        engine.dispose()
-        return True
-    except Exception:
-        return False
+        # Try to create a test instance (will fail if not possible)
+        try:
+            test_mysql = Mysqld()
+            test_mysql.stop()
+            available.append("mysql")
+        except Exception:
+            pass  # MySQL not available, skip it
+    except ImportError:
+        pass  # testing.mysqld not installed
+
+    return available
+
+
+DATABASE_TYPES = _get_available_databases()
 
 
 # Session-scoped database instances for parallel execution
@@ -90,11 +102,10 @@ def _postgres_session(request):
             from testing.postgresql import Postgresql
 
             _postgres_instances[worker_id] = Postgresql()
-        except ImportError:
-            pytest.skip("testing.postgresql not installed")
+        except ImportError as e:
+            raise RuntimeError(f"testing.postgresql not installed: {e}") from e
         except Exception as e:
-            # If we can't create PostgreSQL (e.g., shared memory limit), skip
-            pytest.skip(f"PostgreSQL not available: {e}")
+            raise RuntimeError(f"PostgreSQL not available: {e}") from e
 
     yield _postgres_instances[worker_id]
 
@@ -111,11 +122,10 @@ def _mysql_session(request):
             from testing.mysqld import Mysqld
 
             _mysql_instances[worker_id] = Mysqld()
-        except ImportError:
-            pytest.skip("testing.mysqld not installed")
+        except ImportError as e:
+            raise RuntimeError(f"testing.mysqld not installed: {e}") from e
         except Exception as e:
-            # If we can't create MySQL, skip
-            pytest.skip(f"MySQL not available: {e}")
+            raise RuntimeError(f"MySQL not available: {e}") from e
 
     yield _mysql_instances[worker_id]
 
@@ -131,10 +141,10 @@ def _get_postgres_instance():
             from testing.postgresql import Postgresql
 
             _postgres_instances[worker_id] = Postgresql()
-        except ImportError:
-            pytest.skip("testing.postgresql not installed")
+        except ImportError as e:
+            raise RuntimeError(f"testing.postgresql not installed: {e}") from e
         except Exception as e:
-            pytest.skip(f"PostgreSQL not available: {e}")
+            raise RuntimeError(f"PostgreSQL not available: {e}") from e
     return _postgres_instances[worker_id]
 
 
@@ -149,10 +159,10 @@ def _get_mysql_instance():
             from testing.mysqld import Mysqld
 
             _mysql_instances[worker_id] = Mysqld()
-        except ImportError:
-            pytest.skip("testing.mysqld not installed")
+        except ImportError as e:
+            raise RuntimeError(f"testing.mysqld not installed: {e}") from e
         except Exception as e:
-            pytest.skip(f"MySQL not available: {e}")
+            raise RuntimeError(f"MySQL not available: {e}") from e
     return _mysql_instances[worker_id]
 
 
@@ -244,6 +254,12 @@ def db_engine(request):
 @pytest.fixture
 def postgres_engine():
     """PostgreSQL-specific engine fixture."""
+    # Raise error if PostgreSQL not available (don't skip)
+    if "postgres" not in DATABASE_TYPES:
+        raise RuntimeError(
+            "PostgreSQL not available - not in available databases. "
+            "Install PostgreSQL or testing.postgresql to enable PostgreSQL tests."
+        )
     postgres = _get_postgres_instance()
     engine = create_engine(postgres.url())
     yield engine
@@ -253,6 +269,12 @@ def postgres_engine():
 @pytest.fixture
 def mysql_engine():
     """MySQL-specific engine fixture."""
+    # Raise error if MySQL not available (don't skip)
+    if "mysql" not in DATABASE_TYPES:
+        raise RuntimeError(
+            "MySQL not available - not in available databases. "
+            "Install MySQL or testing.mysqld to enable MySQL tests."
+        )
     mysql = _get_mysql_instance()
     engine = create_engine(mysql.url())
     yield engine
@@ -266,3 +288,28 @@ def sqlite_engine(tmp_path):
     engine = create_engine(f"sqlite:///{db_path}")
     yield engine
     engine.dispose()
+
+
+def pytest_collection_modifyitems(config, items):
+    """Modify test collection to deselect tests that require unavailable databases."""
+    # Deselect PostgreSQL-specific tests if PostgreSQL is not available
+    if "postgres" not in DATABASE_TYPES:
+        deselected = []
+        for item in items[:]:  # Copy list to iterate safely
+            # Check if test uses postgres_engine fixture or has @pytest.mark.postgres
+            if "postgres_engine" in item.fixturenames or item.get_closest_marker("postgres"):
+                items.remove(item)
+                deselected.append(item)
+        if deselected:
+            config.hook.pytest_deselected(items=deselected)
+
+    # Deselect MySQL-specific tests if MySQL is not available
+    if "mysql" not in DATABASE_TYPES:
+        deselected = []
+        for item in items[:]:  # Copy list to iterate safely
+            # Check if test uses mysql_engine fixture or has @pytest.mark.mysql
+            if "mysql_engine" in item.fixturenames or item.get_closest_marker("mysql"):
+                items.remove(item)
+                deselected.append(item)
+        if deselected:
+            config.hook.pytest_deselected(items=deselected)

@@ -1,0 +1,29 @@
+#!/bin/bash
+# Compatibility wrapper for mysql_install_db (removed in MySQL 8.0+)
+# This script converts mysql_install_db arguments to mysqld --initialize-insecure
+
+# Extract data directory from arguments
+DATADIR=""
+ARGS=()
+DATADIR_NEXT=""
+
+for arg in "$@"; do
+    if [[ "$arg" == --datadir=* ]]; then
+        DATADIR="${arg#--datadir=}"
+    elif [[ "$arg" == --datadir ]]; then
+        DATADIR_NEXT=1
+    elif [[ -n "$DATADIR_NEXT" ]]; then
+        DATADIR="$arg"
+        DATADIR_NEXT=""
+    else
+        ARGS+=("$arg")
+    fi
+done
+
+# If no datadir specified, use default
+if [[ -z "$DATADIR" ]]; then
+    DATADIR="/opt/homebrew/var/mysql"
+fi
+
+# Use mysqld --initialize-insecure instead
+exec mysqld --initialize-insecure --datadir="$DATADIR" "${ARGS[@]}"

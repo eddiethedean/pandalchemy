@@ -4,7 +4,7 @@
 
 Work with database tables as pandas DataFrames while pandalchemy automatically tracks changes and syncs to your database with optimized SQL operations.
 
-[![Tests](https://img.shields.io/badge/tests-973%20passing-brightgreen)](https://github.com/eddiethedean/pandalchemy)
+[![Tests](https://img.shields.io/badge/tests-950%20passing-brightgreen)](https://github.com/eddiethedean/pandalchemy)
 [![Type Checked](https://img.shields.io/badge/mypy-passing-blue)](https://github.com/eddiethedean/pandalchemy)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org)
 
@@ -809,7 +809,18 @@ Built with:
 
 ## Version History
 
-### 1.3.0 (Latest) 🎉
+### 1.4.0 (Latest) 🎉
+- **Enhanced Async Robustness**: Retry logic with exponential backoff for transient failures, connection health checks, and auto-reconnection
+- **Async Performance**: Sync engine caching to avoid redundant engine creation, batch operations for large datasets, and parallel execution with concurrency limits
+- **Async Schema Changes**: Native async schema change support for PostgreSQL and MySQL (add_column, drop_column, rename_column)
+- **Transaction Improvements**: Transaction isolation level support, deadlock detection with automatic retry, and improved conflict resolution for concurrent operations
+- **Better Error Context**: Enhanced error messages with connection pool status, retry attempt tracking, and operation timing information
+- **Greenlet Context Management**: Cleaner greenlet context handling with `AsyncGreenletContext` manager, removing workarounds
+- **Code Quality**: Removed unused dependencies (tabulate, pytest-async-sqlalchemy), all ruff checks passing, ty type checker configuration
+- **Test Suite Optimization**: 30x faster robustness tests, dynamic database detection (no test skips), 950 tests passing
+- **SQLite Async Guidance**: Added warning recommending sync version for SQLite databases (async provides no benefit due to database-level locking)
+
+### 1.3.0
 - **AsyncIO Support**: Full async/await support with `AsyncDataBase` and `AsyncTableDataFrame` classes for async database operations
 - **Enhanced Error Handling**: Detailed error context with error codes, suggested fixes, and structured error information
 - **Memory Optimization**: Incremental change tracking mode to reduce memory usage for large datasets

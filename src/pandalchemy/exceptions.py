@@ -153,9 +153,70 @@ class ConnectionError(PandalchemyError):
         - Connection failure
         - Invalid connection string
         - Connection timeout
+        - Connection pool exhausted
     """
 
-    pass
+    def __init__(
+        self,
+        message: str,
+        connection_pool_status: dict[str, Any] | None = None,
+        retry_attempt: int | None = None,
+        operation_timing: float | None = None,
+        **kwargs,
+    ):
+        """
+        Initialize a ConnectionError.
+
+        Args:
+            message: The error message
+            connection_pool_status: Status of the connection pool when error occurred
+            retry_attempt: Number of retry attempts made (if any)
+            operation_timing: Time taken for the operation in seconds
+            **kwargs: Additional arguments passed to PandalchemyError
+        """
+        super().__init__(message, **kwargs)
+        self.connection_pool_status = connection_pool_status or {}
+        self.retry_attempt = retry_attempt
+        self.operation_timing = operation_timing
+
+    def format_error(self) -> str:
+        """Generate formatted error message with connection context."""
+        lines = [f"{self.__class__.__name__}: {self.message}"]
+
+        if self.table_name:
+            lines.append(f"  Table: '{self.table_name}'")
+
+        if self.operation:
+            lines.append(f"  Operation: {self.operation}")
+
+        if self.error_code:
+            lines.append(f"  Error Code: {self.error_code}")
+
+        if self.retry_attempt is not None:
+            lines.append(f"  Retry Attempt: {self.retry_attempt}")
+
+        if self.operation_timing is not None:
+            lines.append(f"  Operation Timing: {self.operation_timing:.3f}s")
+
+        if self.connection_pool_status:
+            lines.append("  Connection Pool Status:")
+            for key, value in self.connection_pool_status.items():
+                if value is not None:
+                    lines.append(f"    {key}: {value}")
+
+        if self.suggested_fix:
+            lines.append(f"  Fix: {self.suggested_fix}")
+
+        if self.details:
+            if isinstance(self.details, dict):
+                detail_strs = [f"    {k}: {v}" for k, v in self.details.items()]
+                if detail_strs:
+                    lines.append("  Details:")
+                    lines.extend(detail_strs)
+            else:
+                lines.append(f"  Details: {self.details}")
+
+        return "\n".join(lines)
 
 
 class ChangeTrackingError(PandalchemyError):

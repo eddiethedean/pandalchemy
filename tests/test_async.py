@@ -34,7 +34,9 @@ pytestmark = pytest.mark.asyncio
 def sqlite_async_db_path():
     """Create a temporary database file path for async tests."""
     if not ASYNC_AVAILABLE:
-        pytest.skip("Async drivers not available")
+        raise RuntimeError(
+            "Async drivers not available - install: pip install aiosqlite asyncpg aiomysql greenlet"
+        )
 
     # Check if aiosqlite is available (import check only)
     try:
@@ -42,9 +44,13 @@ def sqlite_async_db_path():
 
         spec = importlib.util.find_spec("aiosqlite")
         if spec is None:
-            pytest.skip("aiosqlite not installed - async tests require: pip install aiosqlite")
-    except Exception:
-        pytest.skip("aiosqlite not installed - async tests require: pip install aiosqlite")
+            raise RuntimeError(
+                "aiosqlite not installed - async tests require: pip install aiosqlite"
+            )
+    except Exception as e:
+        raise RuntimeError(
+            f"aiosqlite not installed - async tests require: pip install aiosqlite: {e}"
+        ) from e
 
     # Create a temporary file
     fd, path = tempfile.mkstemp(suffix=".db")
@@ -107,7 +113,9 @@ def sample_data():
 async def test_async_database_initialization(sqlite_async_db_path):
     """Test AsyncDataBase initialization."""
     if not ASYNC_AVAILABLE:
-        pytest.skip("Async drivers not available")
+        raise RuntimeError(
+            "Async drivers not available - install: pip install aiosqlite asyncpg aiomysql greenlet"
+        )
 
     # pytest-green-light automatically establishes greenlet context
     # but we also establish it here as a workaround since the plugin's
@@ -127,7 +135,9 @@ async def test_async_database_initialization(sqlite_async_db_path):
 async def test_async_table_creation_and_push(sqlite_async_db_path, sample_data):
     """Test creating a table and pushing it."""
     if not ASYNC_AVAILABLE:
-        pytest.skip("Async drivers not available")
+        raise RuntimeError(
+            "Async drivers not available - install: pip install aiosqlite asyncpg aiomysql greenlet"
+        )
 
     # pytest-green-light automatically establishes greenlet context
     engine = await _create_async_engine(sqlite_async_db_path)
@@ -159,7 +169,9 @@ async def test_async_table_creation_and_push(sqlite_async_db_path, sample_data):
 async def test_async_table_modification_and_push(sqlite_async_db_path, sample_data):
     """Test modifying a table and pushing changes."""
     if not ASYNC_AVAILABLE:
-        pytest.skip("Async drivers not available")
+        raise RuntimeError(
+            "Async drivers not available - install: pip install aiosqlite asyncpg aiomysql greenlet"
+        )
 
     # pytest-green-light automatically establishes greenlet context
     engine = await _create_async_engine(sqlite_async_db_path)
@@ -196,7 +208,9 @@ async def test_async_table_modification_and_push(sqlite_async_db_path, sample_da
 async def test_async_table_pull(sqlite_async_db_path, sample_data):
     """Test pulling table data from database."""
     if not ASYNC_AVAILABLE:
-        pytest.skip("Async drivers not available")
+        raise RuntimeError(
+            "Async drivers not available - install: pip install aiosqlite asyncpg aiomysql greenlet"
+        )
 
     # pytest-green-light automatically establishes greenlet context
     engine = await _create_async_engine(sqlite_async_db_path)
@@ -234,7 +248,9 @@ async def test_async_table_pull(sqlite_async_db_path, sample_data):
 async def test_async_insert_and_delete(sqlite_async_db_path, sample_data):
     """Test inserting and deleting rows."""
     if not ASYNC_AVAILABLE:
-        pytest.skip("Async drivers not available")
+        raise RuntimeError(
+            "Async drivers not available - install: pip install aiosqlite asyncpg aiomysql greenlet"
+        )
 
     # pytest-green-light automatically establishes greenlet context
     engine = await _create_async_engine(sqlite_async_db_path)
@@ -274,7 +290,9 @@ async def test_async_insert_and_delete(sqlite_async_db_path, sample_data):
 async def test_async_database_push_parallel(sqlite_async_db_path, sample_data):
     """Test parallel push operations for multiple tables."""
     if not ASYNC_AVAILABLE:
-        pytest.skip("Async drivers not available")
+        raise RuntimeError(
+            "Async drivers not available - install: pip install aiosqlite asyncpg aiomysql greenlet"
+        )
 
     # pytest-green-light automatically establishes greenlet context
     engine = await _create_async_engine(sqlite_async_db_path)
@@ -317,7 +335,9 @@ async def test_async_database_push_parallel(sqlite_async_db_path, sample_data):
 async def test_async_table_with_conflict_resolution(sqlite_async_db_path, sample_data):
     """Test conflict resolution with async operations."""
     if not ASYNC_AVAILABLE:
-        pytest.skip("Async drivers not available")
+        raise RuntimeError(
+            "Async drivers not available - install: pip install aiosqlite asyncpg aiomysql greenlet"
+        )
 
     # pytest-green-light automatically establishes greenlet context
     engine = await _create_async_engine(sqlite_async_db_path)
@@ -362,7 +382,9 @@ async def test_async_table_with_conflict_resolution(sqlite_async_db_path, sample
 async def test_async_table_dataframe_pandas_operations(sqlite_async_db_path, sample_data):
     """Test that AsyncTableDataFrame supports all pandas operations."""
     if not ASYNC_AVAILABLE:
-        pytest.skip("Async drivers not available")
+        raise RuntimeError(
+            "Async drivers not available - install: pip install aiosqlite asyncpg aiomysql greenlet"
+        )
 
     # pytest-green-light automatically establishes greenlet context
     engine = await _create_async_engine(sqlite_async_db_path)

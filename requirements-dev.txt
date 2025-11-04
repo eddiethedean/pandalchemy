@@ -11,7 +11,6 @@ sqlalchemy>=2.0.0
 fullmetalalchemy>=0.1.0
 transmutation>=0.1.0
 numpy>=1.20.0
-tabulate>=0.8.0
 
 # Optional database drivers for multi-database testing
 # PostgreSQL: testing.postgresql (creates isolated instances per test)

@@ -342,3 +342,59 @@ def validate_dataframe_for_sql(df: pd.DataFrame) -> None:
 
     if not df.columns.is_unique:
         raise DataValidationError("DataFrame columns must have unique names for SQL operations")
+
+
+def extract_engine_from_connection(con: Any) -> Any:
+    """
+    Extract SQLAlchemy Engine from connection object.
+
+    Pandas to_sql accepts both Engine and Connection objects.
+    This helper extracts the Engine in either case.
+
+    Args:
+        con: SQLAlchemy Engine or Connection object
+
+    Returns:
+        SQLAlchemy Engine object
+
+    Raises:
+        TypeError: If con is not a valid Engine or Connection
+    """
+    from sqlalchemy import Engine
+    from sqlalchemy.engine import Connection
+
+    if isinstance(con, Engine):
+        return con
+    elif isinstance(con, Connection):
+        return con.engine
+    else:
+        raise TypeError(f"con must be a SQLAlchemy Engine or Connection, got {type(con).__name__}")
+
+
+def extract_async_engine_from_connection(con: Any) -> Any:
+    """
+    Extract SQLAlchemy AsyncEngine from connection object.
+
+    Async to_sql accepts both AsyncEngine and AsyncConnection objects.
+    This helper extracts the AsyncEngine in either case.
+
+    Args:
+        con: SQLAlchemy AsyncEngine or AsyncConnection object
+
+    Returns:
+        SQLAlchemy AsyncEngine object
+
+    Raises:
+        TypeError: If con is not a valid AsyncEngine or AsyncConnection
+    """
+    from sqlalchemy.ext.asyncio import AsyncEngine
+    from sqlalchemy.ext.asyncio.engine import AsyncConnection
+
+    if isinstance(con, AsyncEngine):
+        return con
+    elif isinstance(con, AsyncConnection):
+        return con.engine
+    else:
+        raise TypeError(
+            f"con must be a SQLAlchemy AsyncEngine or AsyncConnection, got {type(con).__name__}"
+        )

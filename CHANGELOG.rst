@@ -2,6 +2,29 @@
 Changelog
 =========
 
+1.5.0 (2025-01-XX)
+------------------
+
+**Feature Release - pandas `to_sql` Compatibility**
+
+New Features
+~~~~~~~~~~~~
+
+* **pandas `to_sql` Compatibility**: Full pandas-compatible `to_sql` method with enhanced features
+  * Primary key creation and auto-increment support for new tables
+  * Automatic primary key inference from DataFrame index (named or MultiIndex)
+  * Support for all pandas `to_sql` parameters (index, index_label, chunksize, dtype, if_exists)
+  * Works seamlessly with existing TableDataFrame change tracking
+* **Async `to_sql` Support**: `AsyncTableDataFrame.to_sql()` for async database operations
+* **Composite Primary Key Support in `create_table`**: `DataBase.create_table()` now accepts `str | list[str]` for composite keys
+
+Improvements
+~~~~~~~~~~~~
+
+* **Improved Type Safety**: Fixed type annotations for composite primary keys throughout the codebase
+* **Enhanced MySQL Async Support**: Fixed async URL conversion and sync engine caching for MySQL databases
+* **Testing**: 986 tests passing with comprehensive `to_sql` coverage across SQLite, PostgreSQL, and MySQL
+
 0.2.0 (2025-01-20)
 ------------------
 

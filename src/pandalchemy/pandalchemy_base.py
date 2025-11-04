@@ -227,7 +227,11 @@ class DataBase(IDataBase):
             table.push()
 
     def create_table(
-        self, name: str, data: DataFrame, primary_key: str = "id", if_exists: str = "fail"
+        self,
+        name: str,
+        data: DataFrame,
+        primary_key: str | list[str] = "id",
+        if_exists: str = "fail",
     ) -> TableDataFrame:
         """
         Create a new table from a DataFrame.
@@ -235,7 +239,8 @@ class DataBase(IDataBase):
         Args:
             name: Name for the new table
             data: DataFrame containing the data
-            primary_key: Name of the primary key column
+            primary_key: Name of the primary key column(s). Can be a string for single
+                column primary key or a list of strings for composite primary key.
             if_exists: What to do if table exists ('fail', 'replace', 'append')
 
         Returns:

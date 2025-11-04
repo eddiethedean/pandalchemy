@@ -229,6 +229,257 @@ class AsyncTableDataFrame(TableDataFrame):
             tracker = ChangeTracker(self._primary_key, data, tracking_mode=self._tracking_mode)
             object.__setattr__(self, "_tracker", tracker)
 
+    async def to_sql(
+        self,
+        name: str,
+        con,
+        schema: str | None = None,
+        if_exists: str = "fail",
+        index: bool = True,
+        index_label: str | None = None,
+        chunksize: int | None = None,
+        dtype: dict[str, Any] | None = None,
+        method: str | None = None,
+        primary_key: str | list[str] | None = None,
+        auto_increment: bool = False,
+    ) -> None:
+        """
+        Write DataFrame to SQL database table (async version).
+
+        This method provides pandas-compatible `to_sql` functionality with additional
+        features for primary key creation and auto-increment support.
+
+        Args:
+            name: Name of SQL table
+            con: SQLAlchemy AsyncEngine or AsyncConnection object
+            schema: Optional schema name
+            if_exists: How to behave if table exists: 'fail', 'replace', 'append'
+            index: Write DataFrame index as a column (default True)
+            index_label: Column label for index column(s) (ignored if index=False)
+            chunksize: Number of rows to write per batch (None uses adaptive batching)
+            dtype: Dict of column names to SQLAlchemy types to override type inference
+            method: Not used (pandas parameter, ignored for raw SQLAlchemy approach)
+            primary_key: Name of primary key column(s) - str or list for composite
+            auto_increment: If True, enable auto-increment for primary key (table creation only)
+
+        Raises:
+            ValueError: For invalid parameters or missing primary key when needed
+            TypeError: If con is not a valid AsyncEngine or AsyncConnection
+        """
+        import warnings
+
+        import pandas as pd
+
+        from pandalchemy.async_operations import AsyncGreenletContext, _async_execute_inserts
+        from pandalchemy.sql_operations import (
+            _chunk_list,
+            create_table_from_dataframe,
+            get_primary_key,
+            table_exists,
+        )
+        from pandalchemy.utils import (
+            convert_records_list,
+            extract_async_engine_from_connection,
+            extract_primary_key_column,
+            prepare_primary_key_for_table_creation,
+        )
+
+        # Use greenlet context manager (same pattern as async push)
+        async with AsyncGreenletContext():
+            pass  # Context established
+
+        # Extract async engine from connection
+        async_engine = extract_async_engine_from_connection(con)
+        # Get cached sync engine for schema operations (same pattern as async push)
+        sync_engine = get_sync_engine_cached(async_engine)
+
+        # Warn if method parameter provided (not used)
+        if method is not None:
+            warnings.warn(
+                "method parameter is not used with raw SQLAlchemy approach",
+                UserWarning,
+                stacklevel=2,
+            )
+
+        # Validate if_exists
+        if if_exists not in ("fail", "replace", "append"):
+            raise ValueError(
+                f"if_exists must be one of 'fail', 'replace', 'append', got '{if_exists}'"
+            )
+
+        # Normalize schema
+        schema_normalized = schema if schema else None
+
+        # Prepare DataFrame - handle index parameter (same as sync)
+        df_to_write = self._data.copy()
+
+        if not index:
+            # Exclude index from table
+            df_to_write = df_to_write.reset_index(drop=True)
+        elif index_label is not None:
+            # Use index_label as column name for index
+            if df_to_write.index.name is None:
+                df_to_write.index.name = index_label
+            elif df_to_write.index.name != index_label:
+                # Conflict - index has different name
+                raise ValueError(
+                    f"index_label '{index_label}' conflicts with existing index name "
+                    f"'{df_to_write.index.name}'. Use primary_key parameter instead."
+                )
+
+        # Determine primary key (use sync engine for table existence check, same as async push)
+        table_already_exists = table_exists(sync_engine, name, schema_normalized)
+
+        if table_already_exists and if_exists == "append":
+            # For append mode, infer primary key from existing table if not provided
+            if primary_key is None:
+                primary_key = get_primary_key(sync_engine, name, schema_normalized)
+                if primary_key is None:
+                    raise ValueError(
+                        f"Table '{name}' exists but has no primary key. "
+                        "Cannot append without primary key specification."
+                    )
+        else:
+            # For create/replace mode, need to determine primary key
+            if primary_key is None:
+                # Try to infer from index (if index was included)
+                if not index:
+                    # If index=False, we can't infer from index - must be provided
+                    raise ValueError(
+                        "Cannot infer primary key when index=False. "
+                        "Please provide primary_key parameter when creating new table."
+                    )
+                elif isinstance(df_to_write.index, pd.MultiIndex):
+                    index_names = [n for n in df_to_write.index.names if n is not None]
+                    if len(index_names) > 0:
+                        primary_key = index_names
+                    else:
+                        raise ValueError(
+                            "Cannot infer primary key: index is unnamed MultiIndex. "
+                            "Please provide primary_key parameter."
+                        )
+                elif df_to_write.index.name is not None:
+                    primary_key = df_to_write.index.name
+                else:
+                    raise ValueError(
+                        "Cannot infer primary key: index is unnamed. "
+                        "Please provide primary_key parameter when creating new table."
+                    )
+
+        # Validate index_label doesn't conflict with primary_key
+        if index_label is not None and primary_key is not None:
+            from pandalchemy.pk_utils import normalize_primary_key
+
+            pk_cols = normalize_primary_key(primary_key)
+            if len(pk_cols) == 1 and index_label != pk_cols[0]:
+                raise ValueError(
+                    f"index_label '{index_label}' conflicts with primary_key '{pk_cols[0]}'. "
+                    "They must match or use primary_key parameter only."
+                )
+
+        # Handle append mode
+        if table_already_exists and if_exists == "append":
+            # Validate schema compatibility (use sync engine for introspection, same as async push)
+            from sqlalchemy import inspect as sql_inspect
+
+            inspector = sql_inspect(sync_engine)
+            existing_columns = {
+                col["name"] for col in inspector.get_columns(name, schema=schema_normalized)
+            }
+
+            # Check that all required columns exist in DataFrame
+            from pandalchemy.pk_utils import normalize_primary_key
+
+            # primary_key is guaranteed to be set at this point (validated above)
+            assert primary_key is not None
+            pk_cols = normalize_primary_key(primary_key)
+            missing_cols = []
+            for pk_col in pk_cols:
+                if pk_col not in df_to_write.columns and (
+                    df_to_write.index.name != pk_col
+                    and not (
+                        isinstance(df_to_write.index, pd.MultiIndex)
+                        and pk_col in df_to_write.index.names
+                    )
+                ):
+                    missing_cols.append(pk_col)
+
+            if missing_cols:
+                raise ValueError(
+                    f"Primary key column(s) missing from DataFrame: {missing_cols}. "
+                    f"Required for append mode."
+                )
+
+            # Check DataFrame columns match existing table (at least PK columns)
+            df_cols = set(df_to_write.columns)
+            if df_to_write.index.name:
+                df_cols.add(df_to_write.index.name)
+            if isinstance(df_to_write.index, pd.MultiIndex):
+                df_cols.update(df_to_write.index.names)
+
+            # Warn about missing columns in DataFrame (but don't fail)
+            missing_in_df = existing_columns - df_cols
+            if missing_in_df:
+                warnings.warn(
+                    f"DataFrame missing columns present in table: {missing_in_df}. "
+                    "These will be set to NULL.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+
+            # Prepare data for insertion
+            # primary_key is guaranteed to be set at this point (validated above)
+            assert primary_key is not None
+            df_prepared = prepare_primary_key_for_table_creation(df_to_write, primary_key)
+            df_to_insert = extract_primary_key_column(df_prepared, primary_key)
+
+            # Insert data using async operations with timeout support
+            query_timeout = getattr(self, "_query_timeout", None)
+
+            async def _insert_data() -> None:
+                async with AsyncGreenletContext(), async_engine.begin() as conn:
+                    if not df_to_insert.empty:
+                        records = convert_records_list(df_to_insert.to_dict("records"))
+                        # Use chunksize if provided, otherwise use adaptive batching
+                        if chunksize is not None:
+                            # Manual chunking
+                            chunks = _chunk_list(records, chunksize)
+                            for chunk in chunks:
+                                await _async_execute_inserts(conn, name, chunk, schema_normalized)
+                        else:
+                            # Use adaptive batching (handled by _async_execute_inserts)
+                            await _async_execute_inserts(conn, name, records, schema_normalized)
+
+            # Apply timeout if specified
+            if query_timeout:
+                import asyncio
+
+                async with asyncio.timeout(query_timeout):
+                    await _insert_data()
+            else:
+                await _insert_data()
+        else:
+            # Create new table or replace existing (use sync engine directly, same as async push)
+            if table_already_exists and if_exists == "fail":
+                raise ValueError(
+                    f"Table '{name}' already exists. Use if_exists='replace' or 'append'."
+                )
+
+            # Create table with primary key and optional auto-increment
+            # Use sync engine directly (same pattern as async push line 151)
+            # primary_key is guaranteed to be set at this point (validated above)
+            assert primary_key is not None
+            create_table_from_dataframe(
+                engine=sync_engine,
+                table_name=name,
+                df=df_to_write,
+                primary_key=primary_key,
+                schema=schema_normalized,
+                if_exists=if_exists,
+                auto_increment=auto_increment,
+                dtype=dtype,
+            )
+
 
 class AsyncDataBase:
     """

@@ -4,7 +4,7 @@
 
 Work with database tables as pandas DataFrames while pandalchemy automatically tracks changes and syncs to your database with optimized SQL operations.
 
-[![Tests](https://img.shields.io/badge/tests-950%20passing-brightgreen)](https://github.com/eddiethedean/pandalchemy)
+[![Tests](https://img.shields.io/badge/tests-986%20passing-brightgreen)](https://github.com/eddiethedean/pandalchemy)
 [![Type Checked](https://img.shields.io/badge/mypy-passing-blue)](https://github.com/eddiethedean/pandalchemy)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org)
 
@@ -96,6 +96,19 @@ users.push()  # Executes ALTER TABLE
 ```python
 users['age'] = users['age'] + 1
 users.push()  # Atomic transaction with rollback on error
+```
+
+### pandas `to_sql` Compatibility
+```python
+# pandas-compatible to_sql with enhanced features
+df = pd.DataFrame({'name': ['Alice', 'Bob'], 'age': [30, 25]})
+tdf = pa.TableDataFrame(data=df, primary_key='id')
+
+# Create table with auto-increment primary key
+tdf.to_sql('users', engine, primary_key='id', auto_increment=True, if_exists='replace')
+
+# Append to existing table (infers primary key automatically)
+tdf.to_sql('users', engine, if_exists='append')
 ```
 
 ---
@@ -421,6 +434,7 @@ table = pa.TableDataFrame(
 **Database Methods:**
 - `push()` - Sync to database
 - `pull()` - Refresh from database
+- `to_sql(name, con, ...)` - Write DataFrame to SQL table (pandas-compatible with enhanced features)
 - `get_next_pk_value()` - Next auto-increment value
 
 **Inspection Methods:**
@@ -809,7 +823,19 @@ Built with:
 
 ## Version History
 
-### 1.4.0 (Latest) 🎉
+### 1.5.0 (Latest) 🎉
+- **pandas `to_sql` Compatibility**: Full pandas-compatible `to_sql` method with enhanced features
+  - Primary key creation and auto-increment support for new tables
+  - Automatic primary key inference from DataFrame index (named or MultiIndex)
+  - Support for all pandas `to_sql` parameters (index, index_label, chunksize, dtype, if_exists)
+  - Works seamlessly with existing TableDataFrame change tracking
+- **Async `to_sql` Support**: `AsyncTableDataFrame.to_sql()` for async database operations
+- **Composite Primary Key Support in `create_table`**: `DataBase.create_table()` now accepts `str | list[str]` for composite keys
+- **Improved Type Safety**: Fixed type annotations for composite primary keys throughout the codebase
+- **Enhanced MySQL Async Support**: Fixed async URL conversion and sync engine caching for MySQL databases
+- **Testing**: 986 tests passing with comprehensive `to_sql` coverage across SQLite, PostgreSQL, and MySQL
+
+### 1.4.0
 - **Enhanced Async Robustness**: Retry logic with exponential backoff for transient failures, connection health checks, and auto-reconnection
 - **Async Performance**: Sync engine caching to avoid redundant engine creation, batch operations for large datasets, and parallel execution with concurrency limits
 - **Async Schema Changes**: Native async schema change support for PostgreSQL and MySQL (add_column, drop_column, rename_column)

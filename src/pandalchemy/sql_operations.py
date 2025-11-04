@@ -713,6 +713,8 @@ def create_table_from_dataframe(
     primary_key: str | list[str],
     schema: str | None,
     if_exists: str = "fail",
+    auto_increment: bool = False,
+    dtype: dict[str, Any] | None = None,
 ) -> None:
     """
     Create a new table from a DataFrame.
@@ -727,14 +729,24 @@ def create_table_from_dataframe(
         primary_key: Name of the primary key column(s) - single string or list for composite
         schema: Optional schema name
         if_exists: What to do if table exists ('fail', 'replace', 'append')
+        auto_increment: If True, enable auto-increment for primary key (single integer PK only)
+        dtype: Optional dict mapping column names to SQLAlchemy types to override inference
 
     Raises:
-        ValueError: If table exists and if_exists='fail'
+        ValueError: If table exists and if_exists='fail', or if auto_increment is invalid
     """
     from sqlalchemy import Boolean, Column, Float, Integer, MetaData, PrimaryKeyConstraint, String
 
     from pandalchemy.pk_utils import normalize_primary_key
     from pandalchemy.utils import prepare_primary_key_for_table_creation
+
+    # Validate auto_increment
+    pk_cols = normalize_primary_key(primary_key)
+    if auto_increment and len(pk_cols) > 1:
+        raise ValueError(
+            "auto_increment=True only supported for single-column primary keys. "
+            f"Got composite key: {pk_cols}"
+        )
 
     # Prepare primary key (handles index naming and validation)
     df_prepared = prepare_primary_key_for_table_creation(df, primary_key)
@@ -742,11 +754,19 @@ def create_table_from_dataframe(
     # Convert DataFrame to ensure primary key is a column
     df_to_write = extract_primary_key_column(df_prepared, primary_key)
 
+    # Validate auto_increment after PK is in columns
+    if auto_increment:
+        pk_col = pk_cols[0]
+        if pk_col in df_to_write.columns:
+            pk_dtype = df_to_write[pk_col].dtype
+            if "int" not in str(pk_dtype).lower():
+                raise ValueError(
+                    f"auto_increment=True requires integer primary key. "
+                    f"Column '{pk_col}' has dtype '{pk_dtype}'"
+                )
+
     # Normalize schema for pandas
     schema_normalized = normalize_schema(schema)
-
-    # Normalize primary key to list format
-    pk_cols = normalize_primary_key(primary_key)
 
     # Use SQLAlchemy Table API for all cases to ensure PRIMARY KEY constraint
     # This avoids the ALTER TABLE limitation in SQLite and other databases
@@ -756,44 +776,89 @@ def create_table_from_dataframe(
     columns: list[Column] = []
     # MySQL requires VARCHAR length - use a reasonable default
     is_mysql = engine.dialect.name == "mysql"
+    is_sqlite = engine.dialect.name == "sqlite"
+    is_postgres = engine.dialect.name == "postgresql"
     string_length = 255 if is_mysql else None
 
     for col_name in df_to_write.columns:
-        dtype = df_to_write[col_name].dtype
-
-        # For empty DataFrames, default to String to avoid type inference issues
-        # Empty DataFrames have object dtype, but we don't know what type will be inserted
-        # Type annotation allows both type classes and instances (String vs String(length))
-        col_type: type[Any] | Any
-        if df_to_write.empty:
-            col_type = String(string_length) if is_mysql else String
-        elif "int" in str(dtype):
-            col_type = Integer
-        elif "float" in str(dtype):
-            col_type = Float
-        elif "bool" in str(dtype):
-            col_type = Boolean
-        elif "datetime" in str(dtype):
-            # DateTime columns - use String for SQLite, DateTime for others
-            if engine.dialect.name == "sqlite":
-                col_type = String(string_length) if is_mysql else String
-            else:
-                from sqlalchemy import DateTime
-
-                col_type = DateTime
+        # Check if dtype override provided
+        if dtype and col_name in dtype:
+            col_type = dtype[col_name]
         else:
-            # MySQL requires explicit VARCHAR length, others can be None
-            col_type = String(string_length) if is_mysql else String
-        columns.append(Column(col_name, col_type))
+            # Infer from DataFrame
+            col_dtype = df_to_write[col_name].dtype
 
-    # Add primary key constraint
-    table_obj = Table(
-        table_name,
-        metadata,
-        *columns,
-        PrimaryKeyConstraint(*pk_cols, name=f"{table_name}_pk"),
-        schema=schema_normalized,
-    )
+            # For empty DataFrames, default to String to avoid type inference issues
+            # Empty DataFrames have object dtype, but we don't know what type will be inserted
+            # Type annotation allows both type classes and instances (String vs String(length))
+            col_type: type[Any] | Any
+            if df_to_write.empty:
+                col_type = String(string_length) if is_mysql else String
+            elif "int" in str(col_dtype):
+                col_type = Integer
+            elif "float" in str(col_dtype):
+                col_type = Float
+            elif "bool" in str(col_dtype):
+                col_type = Boolean
+            elif "datetime" in str(col_dtype):
+                # DateTime columns - use String for SQLite, DateTime for others
+                if is_sqlite:
+                    col_type = String(string_length) if is_mysql else String
+                else:
+                    from sqlalchemy import DateTime
+
+                    col_type = DateTime
+            else:
+                # MySQL requires explicit VARCHAR length, others can be None
+                col_type = String(string_length) if is_mysql else String
+
+        # Handle auto-increment for primary key column
+        is_pk_col = col_name in pk_cols
+        if auto_increment and is_pk_col and len(pk_cols) == 1:
+            # Apply auto-increment based on database dialect
+            if is_sqlite:
+                # SQLite requires INTEGER PRIMARY KEY AUTOINCREMENT
+                # Ensure it's Integer type
+                if col_type != Integer:
+                    col_type = Integer
+                columns.append(Column(col_name, col_type, autoincrement=True, primary_key=True))
+            elif is_mysql:
+                # MySQL uses AUTO_INCREMENT
+                columns.append(Column(col_name, col_type, autoincrement=True, primary_key=True))
+            elif is_postgres:
+                # PostgreSQL uses Identity (SQLAlchemy 1.4+) or autoincrement
+                try:
+                    from sqlalchemy import Identity
+
+                    columns.append(Column(col_name, col_type, Identity(), primary_key=True))
+                except (ImportError, AttributeError):
+                    # Fallback for older SQLAlchemy versions - use autoincrement
+                    columns.append(Column(col_name, col_type, autoincrement=True, primary_key=True))
+            else:
+                # Other databases - use autoincrement if supported
+                columns.append(Column(col_name, col_type, autoincrement=True, primary_key=True))
+        else:
+            # Regular column
+            columns.append(Column(col_name, col_type))
+
+    # Add primary key constraint (only if not already set via Column)
+    if not auto_increment or len(pk_cols) > 1:
+        # For composite keys or non-auto-increment, add constraint separately
+        table_obj = Table(
+            table_name,
+            metadata,
+            *columns,
+            PrimaryKeyConstraint(*pk_cols, name=f"{table_name}_pk"),
+            schema=schema_normalized,
+        )
+    else:
+        # For auto-increment single PK, PK is already set in Column definition
+        table_obj = Table(
+            table_name,
+            metadata,
+            *columns,
+            schema=schema_normalized,
+        )
 
     # Create the table and insert data in explicit transaction
     # This ensures everything commits before any subsequent operations

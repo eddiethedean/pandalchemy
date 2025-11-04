@@ -47,6 +47,11 @@ class SyncEngineCache:
             url_str.replace("+asyncpg", "").replace("+aiomysql", "").replace("+aiosqlite", "")
         )
 
+        # If MySQL URL has no driver specified, default to pymysql
+        # (MySQLdb is not commonly installed, pymysql is more common)
+        if sync_url.startswith("mysql://") and "+" not in sync_url.split("://")[0]:
+            sync_url = sync_url.replace("mysql://", "mysql+pymysql://")
+
         with self._lock:
             if sync_url not in self._cache:
                 # Create new sync engine

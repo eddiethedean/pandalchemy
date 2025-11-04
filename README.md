@@ -26,6 +26,8 @@ db.push()  # One line, optimized transaction
 
 **No more manual SQL**. No more tracking what changed. Just work with your data.
 
+> **Version 1.6.0**: All raw SQL has been eliminated in favor of SQLAlchemy ORM/Table API methods, improving type safety, maintainability, and database portability.
+
 ---
 
 ## Quick Start

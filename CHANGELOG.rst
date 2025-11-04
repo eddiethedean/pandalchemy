@@ -2,6 +2,26 @@
 Changelog
 =========
 
+1.6.0 (2025-01-XX)
+------------------
+
+**Code Quality Release - Remove Raw SQL**
+
+Improvements
+~~~~~~~~~~~~
+
+* **Eliminated Raw SQL**: All raw SQL statements have been replaced with SQLAlchemy ORM/Table API methods
+  * SELECT queries now use SQLAlchemy's `select()` and `Table` API instead of raw SQL strings
+  * Schema changes (ALTER TABLE) now use transmutation library functions with proper database-specific parameters
+  * Health checks use SQLAlchemy's `select(1)` instead of raw SQL
+  * Transaction isolation level uses SQLAlchemy's `DDL()` construct
+  * Improved type safety and database portability
+  * Better maintainability and code consistency
+* **Enhanced Transmutation Integration**: All schema changes now use transmutation library with proper parameters
+  * PostgreSQL: Uses `verify=False` to avoid metadata lock issues
+  * MySQL: Uses `default_varchar_length=255` for VARCHAR columns
+  * Consistent behavior across all database dialects
+
 1.5.0 (2025-01-XX)
 ------------------
 

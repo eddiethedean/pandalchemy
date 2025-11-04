@@ -11,7 +11,18 @@ from typing import Any
 
 import pandas as pd
 import transmutation as tm
-from sqlalchemy import Engine, MetaData, Table, inspect
+from sqlalchemy import (
+    Boolean,
+    Column,
+    Engine,
+    Float,
+    Integer,
+    MetaData,
+    String,
+    Table,
+    inspect,
+    select,
+)
 
 from pandalchemy.exceptions import TransactionError
 from pandalchemy.execution_plan import ExecutionPlan, OperationType, SchemaChange
@@ -125,29 +136,11 @@ def pull_table(
         # Use read_sql directly for MySQL/PostgreSQL to avoid inspect() hangs
         # or as fallback for SQLite when read_sql_table fails
         try:
-            # Use read_sql which is more lenient with type conversions
-            # Build safe query with text() - table/schema names are from database introspection
-            from sqlalchemy import text
-
-            # Build query safely with database-specific quoting
-            if dialect == "mysql":
-                # MySQL uses backticks
-                if schema is None:
-                    query = text(f"SELECT * FROM `{table_name}`")
-                else:
-                    query = text(f"SELECT * FROM `{schema}`.`{table_name}`")
-            elif dialect == "postgresql":
-                # PostgreSQL uses double quotes
-                if schema is None:
-                    query = text(f'SELECT * FROM "{table_name}"')
-                else:
-                    query = text(f'SELECT * FROM "{schema}"."{table_name}"')
-            else:
-                # SQLite and others
-                if schema is None:
-                    query = text(f'SELECT * FROM "{table_name}"')
-                else:
-                    query = text(f'SELECT * FROM "{schema}"."{table_name}"')
+            # Use SQLAlchemy select() with Table API instead of raw SQL
+            # This handles database-specific quoting automatically
+            metadata = MetaData()
+            table = Table(table_name, metadata, autoload_with=engine, schema=schema)
+            query = select(table)
             df = pd.read_sql(query, engine)
         except Exception as e:
             # If all else fails, return empty DataFrame with correct structure
@@ -320,118 +313,24 @@ def _execute_schema_change(
         schema_change: The schema change to apply
         schema: Optional schema name
     """
-    from sqlalchemy import text
-
-    # For PostgreSQL and MySQL, use raw SQL to avoid issues:
-    # - PostgreSQL: transmutation's inspect() can hang due to metadata locks
-    # - MySQL: transmutation doesn't handle VARCHAR length requirement and rename_column requires type
-    # This bypasses these issues by using direct SQL
-    if engine.dialect.name in ("postgresql", "mysql") and schema_change.change_type == "add_column":
-        column_type = _pandas_dtype_to_python_type(schema_change.column_type)
-
-        # Map pandas/SQLAlchemy types to database-specific types
-        is_mysql = engine.dialect.name == "mysql"
-        if is_mysql:
-            type_map = {
-                "Integer": "INTEGER",
-                "Float": "REAL",
-                "Double": "DOUBLE",
-                "Boolean": "BOOLEAN",
-                "String": "VARCHAR(255)",  # MySQL requires VARCHAR length
-                "Text": "TEXT",
-            }
-        else:  # PostgreSQL
-            type_map = {
-                "Integer": "INTEGER",
-                "Float": "REAL",
-                "Double": "DOUBLE PRECISION",
-                "Boolean": "BOOLEAN",
-                "String": "VARCHAR",
-                "Text": "TEXT",
-            }
-        sql_type = type_map.get(column_type.__name__, "VARCHAR(255)" if is_mysql else "VARCHAR")
-
-        # Build ALTER TABLE statement with database-specific quoting
-        if is_mysql:
-            schema_prefix = f"`{schema}`." if schema else ""
-            alter_sql = f"ALTER TABLE {schema_prefix}`{table_name}` ADD COLUMN `{schema_change.column_name}` {sql_type}"
-        else:  # PostgreSQL
-            schema_prefix = f'"{schema}".' if schema else ""
-            alter_sql = f'ALTER TABLE {schema_prefix}"{table_name}" ADD COLUMN "{schema_change.column_name}" {sql_type}'
-
-        # Execute with fresh connection outside any transaction
-        # This ensures the schema change commits immediately, avoiding lock conflicts
-        conn = engine.connect()
-        try:
-            conn.execute(text(alter_sql))
-            conn.commit()
-        finally:
-            conn.close()
-        return
-
-    # For MySQL rename_column, use raw SQL with existing column type
-    # MySQL's CHANGE COLUMN requires the existing column type
-    if engine.dialect.name == "mysql" and schema_change.change_type == "rename_column":
-        if schema_change.new_column_name is None:
-            raise ValueError("new_column_name is required for rename_column operation")
-
-        # Get existing column type from database
-        inspector = inspect(engine)
-        columns_info = inspector.get_columns(table_name, schema=schema)
-        column_info = next(
-            (col for col in columns_info if col["name"] == schema_change.column_name), None
-        )
-
-        if column_info is None:
-            raise ValueError(
-                f"Column '{schema_change.column_name}' not found in table '{table_name}'"
-            )
-
-        # Convert SQLAlchemy type to MySQL type string
-        existing_type = column_info["type"]
-        type_str = str(existing_type)
-
-        # MySQL uses backticks for identifiers
-        schema_prefix = f"`{schema}`." if schema else ""
-        alter_sql = f"ALTER TABLE {schema_prefix}`{table_name}` CHANGE COLUMN `{schema_change.column_name}` `{schema_change.new_column_name}` {type_str}"
-
-        # Execute with fresh connection outside any transaction
-        conn = engine.connect()
-        try:
-            conn.execute(text(alter_sql))
-            conn.commit()
-        finally:
-            conn.close()
-        return
-
-    # For PostgreSQL rename_column, use RENAME COLUMN (doesn't require type)
-    if engine.dialect.name == "postgresql" and schema_change.change_type == "rename_column":
-        if schema_change.new_column_name is None:
-            raise ValueError("new_column_name is required for rename_column operation")
-
-        # PostgreSQL uses double quotes for identifiers
-        schema_prefix = f'"{schema}".' if schema else ""
-        alter_sql = f'ALTER TABLE {schema_prefix}"{table_name}" RENAME COLUMN "{schema_change.column_name}" TO "{schema_change.new_column_name}"'
-
-        # Execute with fresh connection outside any transaction
-        conn = engine.connect()
-        try:
-            conn.execute(text(alter_sql))
-            conn.commit()
-        finally:
-            conn.close()
-        return
-
-    # Use transmutation for other databases or change types
+    # Use transmutation for all schema changes - it handles all databases properly
+    # For PostgreSQL: use verify=False to avoid inspect() hangs due to metadata locks
+    # For MySQL: use default_varchar_length=255 to handle VARCHAR length requirement
     # Wrap transmutation calls to convert ValidationError to TransactionError
     try:
+        is_postgresql = engine.dialect.name == "postgresql"
+        is_mysql = engine.dialect.name == "mysql"
+
         if schema_change.change_type == "add_column":
+            # Use transmutation with database-specific parameters
             tm.add_column(
                 table_name=table_name,
                 column_name=schema_change.column_name,
                 dtype=_pandas_dtype_to_python_type(schema_change.column_type),
                 engine=engine,
                 schema=schema,
+                verify=not is_postgresql,  # Avoid PostgreSQL metadata locks
+                default_varchar_length=255 if is_mysql else None,  # MySQL requires VARCHAR length
             )
         elif schema_change.change_type == "drop_column":
             tm.drop_column(
@@ -511,7 +410,7 @@ def _execute_deletes(
     # Build a minimal Table object with just the primary key column(s)
     # We know the primary key name(s) from the parameter, so we don't need inspect
     # Use Integer as a generic type - SQLAlchemy will handle the actual comparison
-    from sqlalchemy import Column, Integer
+    from sqlalchemy import Column
 
     metadata = MetaData()
 
@@ -735,7 +634,7 @@ def create_table_from_dataframe(
     Raises:
         ValueError: If table exists and if_exists='fail', or if auto_increment is invalid
     """
-    from sqlalchemy import Boolean, Column, Float, Integer, MetaData, PrimaryKeyConstraint, String
+    from sqlalchemy import Column, MetaData, PrimaryKeyConstraint
 
     from pandalchemy.pk_utils import normalize_primary_key
     from pandalchemy.utils import prepare_primary_key_for_table_creation

@@ -123,13 +123,13 @@ async def check_connection_health(engine: AsyncEngine, timeout: float = 5.0) -> 
     """
     import asyncio
 
-    from sqlalchemy import text
+    from sqlalchemy import select
 
     try:
         async with asyncio.timeout(timeout):
             async with engine.begin() as connection:
                 # Simple query to check connection
-                result = await connection.execute(text("SELECT 1"))
+                result = await connection.execute(select(1))
                 result.fetchone()
                 return True
     except asyncio.TimeoutError:

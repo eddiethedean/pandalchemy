@@ -1,12 +1,10 @@
 # Feature Proposal: Enhanced `to_sql` API with Primary Key Support
 
-## Summary
+## Problem Description
 
-This proposal extends pandas `DataFrame.to_sql()` with two new optional parameters (`primary_key` and `auto_increment`) to enable primary key creation and auto-increment functionality when writing DataFrames to SQL databases. This addresses a frequently requested feature that would eliminate the need for manual ALTER TABLE statements after table creation.
+I wish I could use pandas `DataFrame.to_sql()` to create database tables with primary keys in a single step, without needing to write additional SQL statements or manually create table schemas.
 
-## Motivation and Use Cases
-
-### The Problem
+### The Core Problem
 
 The current `to_sql()` method creates tables without primary keys, which is a significant limitation for real-world database workflows. Users must execute additional SQL statements to add primary key constraints, breaking the simplicity of pandas' one-line table creation.
 
@@ -18,13 +16,6 @@ Primary keys are fundamental to database design:
 - **Relationships**: Required for foreign key constraints
 - **Best Practices**: Most database schemas require primary keys
 
-### Common Use Cases
-
-1. **Data Pipeline Initialization**: Creating tables from CSV/Excel files with primary keys
-2. **ETL Workflows**: Setting up staging tables with proper constraints
-3. **Application Development**: Creating database schemas from DataFrame definitions
-4. **Data Migration**: Transferring data with primary key relationships intact
-
 ### Current Limitations
 
 1. **No Primary Key Support**: Tables created by `to_sql()` have no primary key, requiring manual ALTER TABLE statements
@@ -32,43 +23,18 @@ Primary keys are fundamental to database design:
 3. **No Composite Key Support**: Cannot specify multi-column primary keys
 4. **Index Inference**: Index information is written as a regular column but not used as a primary key
 
-### Current Workarounds
+### Common Use Cases
 
-Users currently have two options, both with drawbacks:
+1. **Data Pipeline Initialization**: Creating tables from CSV/Excel files with primary keys
+2. **ETL Workflows**: Setting up staging tables with proper constraints
+3. **Application Development**: Creating database schemas from DataFrame definitions
+4. **Data Migration**: Transferring data with primary key relationships intact
 
-**Option 1: Create table, then add primary key (two-step process)**
-```python
-df.to_sql('users', engine)
-# Then manually add primary key
-with engine.connect() as conn:
-    conn.execute(text("ALTER TABLE users ADD PRIMARY KEY (id)"))
-    conn.commit()
-```
+## Feature Description
 
-**Option 2: Preemptively create table structure, then insert data**
-```python
-from sqlalchemy import Column, Integer, String, MetaData, Table, create_engine
+This proposal extends pandas `DataFrame.to_sql()` with two new optional parameters (`primary_key` and `auto_increment`) to enable primary key creation and auto-increment functionality when writing DataFrames to SQL databases.
 
-# Create table structure with primary key first
-metadata = MetaData()
-users_table = Table(
-    'users',
-    metadata,
-    Column('id', Integer, primary_key=True, autoincrement=True),
-    Column('name', String(50)),
-    Column('age', Integer)
-)
-metadata.create_all(engine)
-
-# Then use to_sql for data insertion (index=False since schema is pre-defined)
-df.to_sql('users', engine, if_exists='append', index=False)
-```
-
-Both approaches are error-prone and break the simplicity of pandas' one-line table creation workflow. The proposed enhancement would eliminate the need for these workarounds for common use cases.
-
-## Proposed API
-
-### New Parameters
+### Proposed API
 
 Add two optional parameters to `DataFrame.to_sql()`:
 
@@ -96,10 +62,27 @@ Add two optional parameters to `DataFrame.to_sql()`:
 - Existing code continues to work unchanged
 - No primary key is created if `primary_key=None` (current behavior)
 
-## Examples
+### Implementation Details
 
-### Example 1: Basic Primary Key Creation
+**Database Support:**
+- **SQLite**: Uses `AUTOINCREMENT` keyword
+- **PostgreSQL**: Uses `SERIAL` or `GENERATED ALWAYS AS IDENTITY` (SQLAlchemy `Identity()`)
+- **MySQL/MariaDB**: Uses `AUTO_INCREMENT` keyword
+- **Other databases**: Fall back to SQLAlchemy's `autoincrement=True` parameter
 
+**SQLAlchemy Integration:**
+- Use SQLAlchemy Core API (`MetaData`, `Table`, `Column`, `PrimaryKeyConstraint`)
+- Leverage SQLAlchemy's dialect-specific auto-increment handling
+- Ensure compatibility with SQLAlchemy 2.0+ patterns
+
+**Type Validation:**
+- Validate `primary_key` parameter (must exist in DataFrame or index)
+- Validate `auto_increment` constraints (single integer column only)
+- Provide clear error messages for invalid configurations
+
+### Examples
+
+**Example 1: Basic Primary Key Creation**
 ```python
 import pandas as pd
 from sqlalchemy import create_engine
@@ -112,8 +95,7 @@ df.index.name = 'id'
 df.to_sql('users', engine, primary_key='id', if_exists='replace')
 ```
 
-### Example 2: Auto-Increment Primary Key
-
+**Example 2: Auto-Increment Primary Key**
 ```python
 df = pd.DataFrame({'name': ['Alice', 'Bob'], 'age': [30, 25]})
 df.index.name = 'id'
@@ -126,8 +108,7 @@ new_df = pd.DataFrame({'name': ['Charlie'], 'age': [35]})
 new_df.to_sql('users', engine, index=False, if_exists='append')  # id auto-generated
 ```
 
-### Example 3: Composite Primary Key
-
+**Example 3: Composite Primary Key**
 ```python
 df = pd.DataFrame({
     'user_id': [1, 1, 2],
@@ -139,8 +120,7 @@ df = pd.DataFrame({
 df.to_sql('memberships', engine, primary_key=['user_id', 'org_id'], index=False, if_exists='replace')
 ```
 
-### Example 4: Primary Key from MultiIndex
-
+**Example 4: Primary Key from MultiIndex**
 ```python
 # Create DataFrame with data and key columns
 df = pd.DataFrame({
@@ -156,16 +136,14 @@ df = df.set_index(['key1', 'key2'], drop=True)
 df.to_sql('data', engine, primary_key=['key1', 'key2'], if_exists='replace')
 ```
 
-### Example 5: No Primary Key (Default Behavior)
-
+**Example 5: No Primary Key (Default Behavior)**
 ```python
 # Default behavior - no primary key created (current pandas behavior)
 df = pd.DataFrame({'name': ['Alice', 'Bob'], 'age': [30, 25]})
 df.to_sql('users', engine, index=False, if_exists='replace')  # No primary key, fully backwards compatible
 ```
 
-### Example 6: Append Mode
-
+**Example 6: Append Mode**
 ```python
 # Create initial table with primary key
 df1 = pd.DataFrame({'name': ['Alice', 'Bob']})
@@ -178,39 +156,9 @@ df2.index.name = 'id'
 df2.to_sql('users', engine, if_exists='append')  # Appends to existing table
 ```
 
-## Implementation Considerations
+### Error Handling
 
-### Database Support
-
-The implementation should support:
-- **SQLite**: Uses `AUTOINCREMENT` keyword
-- **PostgreSQL**: Uses `SERIAL` or `GENERATED ALWAYS AS IDENTITY` (SQLAlchemy `Identity()`)
-- **MySQL/MariaDB**: Uses `AUTO_INCREMENT` keyword
-- **Other databases**: Fall back to SQLAlchemy's `autoincrement=True` parameter
-
-### SQLAlchemy Integration
-
-- Use SQLAlchemy Core API (`MetaData`, `Table`, `Column`, `PrimaryKeyConstraint`)
-- Leverage SQLAlchemy's dialect-specific auto-increment handling
-- Ensure compatibility with SQLAlchemy 2.0+ patterns
-
-### Type Validation
-
-- Validate `primary_key` parameter (must exist in DataFrame or index)
-- Validate `auto_increment` constraints (single integer column only)
-- Provide clear error messages for invalid configurations
-
-### API Design Principles
-
-- **Minimal API Surface**: Only two new optional parameters
-- **Explicit Behavior**: No automatic inference - users must explicitly specify primary keys
-- **Clear Errors**: Explicit error messages when primary key columns are not found
-- **Database Agnostic**: Works across all SQLAlchemy-supported databases
-- **Backwards Compatible**: Default behavior (`primary_key=None`) matches current pandas
-
-## Error Handling
-
-### New Exceptions
+**New Exceptions:**
 
 1. **Primary Key Column Not Found**
    ```python
@@ -259,9 +207,96 @@ The implementation should support:
    df.to_sql('users', engine, primary_key='name', if_exists='replace')  # 'name' exists
    ```
 
-## Testing Strategy
+### API Design Principles
 
-### Test Cases
+- **Minimal API Surface**: Only two new optional parameters
+- **Explicit Behavior**: No automatic inference - users must explicitly specify primary keys
+- **Clear Errors**: Explicit error messages when primary key columns are not found
+- **Database Agnostic**: Works across all SQLAlchemy-supported databases
+- **Backwards Compatible**: Default behavior (`primary_key=None`) matches current pandas
+
+## Alternative Solutions
+
+### Current Workarounds
+
+Users currently have two options, both with drawbacks:
+
+**Option 1: Create table, then add primary key (two-step process)**
+```python
+df.to_sql('users', engine)
+# Then manually add primary key
+with engine.connect() as conn:
+    conn.execute(text("ALTER TABLE users ADD PRIMARY KEY (id)"))
+    conn.commit()
+```
+
+**Option 2: Preemptively create table structure, then insert data**
+```python
+from sqlalchemy import Column, Integer, String, MetaData, Table, create_engine
+
+# Create table structure with primary key first
+metadata = MetaData()
+users_table = Table(
+    'users',
+    metadata,
+    Column('id', Integer, primary_key=True, autoincrement=True),
+    Column('name', String(50)),
+    Column('age', Integer)
+)
+metadata.create_all(engine)
+
+# Then use to_sql for data insertion (index=False since schema is pre-defined)
+df.to_sql('users', engine, if_exists='append', index=False)
+```
+
+**Drawbacks of Current Workarounds:**
+- Requires two-step process (table creation + data insertion)
+- More verbose - requires SQLAlchemy knowledge
+- Breaks the simplicity of one-line table creation
+- Requires maintaining separate schema definitions
+- More error-prone (table structure and data can get out of sync)
+
+### Comparison
+
+The proposed API enhancement provides a more streamlined workflow:
+- Single-step table creation with primary keys
+- Leverages DataFrame structure for schema definition
+- Maintains pandas' simplicity and ease of use
+- Reduces boilerplate code for common use cases
+
+Both approaches can coexist - the proposed enhancement doesn't prevent users from continuing to use the preemptive table creation approach when they need more complex schema control.
+
+## Additional Context
+
+### Proof of Concept
+
+A working implementation demonstrating this API has been developed and tested in the [pandalchemy](https://github.com/eddiethedean/pandalchemy) project (v1.6.0+):
+
+**Implementation Status:**
+- **Production Ready**: Fully implemented and tested
+- **Test Coverage**: 36 comprehensive tests across SQLite, PostgreSQL, and MySQL
+- **Documentation**: Complete API documentation with examples
+- **Test Suite**: 986 tests passing, including edge cases
+
+**Reference Implementation Details:**
+
+The implementation in pandalchemy provides a reference for:
+- API parameter design and validation
+- Auto-increment handling across database dialects
+- Error handling and user feedback
+
+**Note**: The pandalchemy implementation includes primary key inference from index when `primary_key=None` (for convenience), but this proposal recommends a simpler, more explicit API where `primary_key=None` means no primary key is created (no inference). This explicit approach is more aligned with pandas' philosophy of "explicit is better than implicit" and maintains full backwards compatibility.
+
+**Key files for reference:**
+- `src/pandalchemy/tracked_dataframe.py` (lines 1720-1920): Main `to_sql()` implementation
+- `src/pandalchemy/sql_operations.py` (lines 709-896): Database-specific table creation logic
+- `tests/test_to_sql.py`: Comprehensive test suite covering all scenarios
+
+This proof of concept demonstrates the feasibility of the API design and can serve as a reference for pandas core developers during implementation. The proposed pandas API is a simplified version that prioritizes explicitness and backwards compatibility.
+
+### Testing Strategy
+
+**Test Cases:**
 
 1. **Basic Primary Key Creation**
    - Single column primary key
@@ -288,108 +323,14 @@ The implementation should support:
    - SQLite, PostgreSQL, MySQL
    - Edge cases (empty DataFrames, all-NaN columns)
 
-## Proof of Concept and Reference Implementation
-
-A working implementation demonstrating this API has been developed and tested in the [pandalchemy](https://github.com/eddiethedean/pandalchemy) project (v1.5.0+):
-
-### Implementation Status
-- **Production Ready**: Fully implemented and tested
-- **Test Coverage**: 36 comprehensive tests across SQLite, PostgreSQL, and MySQL
-- **Documentation**: Complete API documentation with examples
-- **Test Suite**: 986 tests passing, including edge cases
-
-### Reference Implementation Details
-
-The implementation in pandalchemy provides a reference for:
-- API parameter design and validation
-- Auto-increment handling across database dialects
-- Error handling and user feedback
-
-**Note**: The pandalchemy implementation includes primary key inference from index when `primary_key=None` (for convenience), but this proposal recommends a simpler, more explicit API where `primary_key=None` means no primary key is created (no inference). This explicit approach is more aligned with pandas' philosophy of "explicit is better than implicit" and maintains full backwards compatibility.
-
-Key files for reference:
-- `src/pandalchemy/tracked_dataframe.py` (lines 1720-1920): Main `to_sql()` implementation
-- `src/pandalchemy/sql_operations.py` (lines 709-896): Database-specific table creation logic
-- `tests/test_to_sql.py`: Comprehensive test suite covering all scenarios
-
-This proof of concept demonstrates the feasibility of the API design and can serve as a reference for pandas core developers during implementation. The proposed pandas API is a simplified version that prioritizes explicitness and backwards compatibility.
-
-## Alternative Approaches
-
-### Alternative: Preemptive Table Creation
-
-An alternative approach to adding primary key support would be to create the table structure first using SQLAlchemy, then use `to_sql()` for data insertion. This approach already works today:
-
-```python
-from sqlalchemy import Column, Integer, String, MetaData, Table, create_engine
-
-engine = create_engine('sqlite:///example.db')
-metadata = MetaData()
-
-# Create table structure with primary key
-users_table = Table(
-    'users',
-    metadata,
-    Column('id', Integer, primary_key=True, autoincrement=True),
-    Column('name', String(50)),
-    Column('age', Integer)
-)
-metadata.create_all(engine)
-
-# Then use to_sql for data insertion
-df = pd.DataFrame({'name': ['Alice', 'Bob'], 'age': [30, 25]})
-df.to_sql('users', engine, if_exists='append', index=False)
-```
-
-**Pros:**
-- Already works with current pandas
-- Full control over table schema
-- No changes to pandas API needed
-
-**Cons:**
-- Requires two-step process (table creation + data insertion)
-- More verbose - requires SQLAlchemy knowledge
-- Breaks the simplicity of one-line table creation
-- Requires maintaining separate schema definitions
-- More error-prone (table structure and data can get out of sync)
-
-**Comparison:**
-The proposed API enhancement provides a more streamlined workflow:
-- Single-step table creation with primary keys
-- Leverages DataFrame structure for schema definition
-- Maintains pandas' simplicity and ease of use
-- Reduces boilerplate code for common use cases
-
-Both approaches can coexist - the proposed enhancement doesn't prevent users from continuing to use the preemptive table creation approach when they need more complex schema control.
-
-## Open Questions
-
-1. **Index Handling**: Should `index=False` exclude primary key column if it's in the index?
-   - Current proposal: Primary key column must exist in DataFrame columns (if `index=False`, primary key must be a column, not in index)
-   - Alternative: Always include primary key column even with `index=False`
-
-2. **Auto-Increment Behavior**: Should auto-increment values be populated in the DataFrame after insertion?
-   - Current proposal: No (database handles auto-increment)
-   - Alternative: Fetch and populate auto-generated values
-
-3. **Composite Key Auto-Increment**: Should we support auto-increment for one column in a composite key?
-   - Current proposal: No (only single-column primary keys)
-   - Alternative: Allow specifying which column in composite key should auto-increment
-
-## Timeline
-
-- **Phase 1**: Core implementation (primary key creation without auto-increment)
-- **Phase 2**: Auto-increment support
-- **Phase 3**: Enhanced inference and error handling
-- **Phase 4**: Documentation and examples
-
-## References
+### References
 
 - [pandas `to_sql` documentation](https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.to_sql.html)
 - [SQLAlchemy Core API](https://docs.sqlalchemy.org/en/20/core/)
-- [pandalchemy implementation](https://github.com/eddiethedean/pandalchemy) (proof of concept)
+- [pandalchemy implementation](https://github.com/eddiethedean/pandalchemy) (proof of concept, v1.6.0+)
+- [pandas Contributing Guide](https://pandas.pydata.org/docs/dev/development/contributing.html)
 
-## Community Feedback and Discussion
+### Community Feedback
 
 This proposal addresses a frequently requested feature that would significantly improve pandas' database integration capabilities. The API design is:
 
@@ -398,30 +339,10 @@ This proposal addresses a frequently requested feature that would significantly 
 - **Well-Tested**: Proof of concept demonstrates feasibility across multiple databases
 - **Community-Driven**: Based on real-world use cases and user requests
 
-### Seeking Community Input
-
-We welcome feedback from both pandas users and core developers on:
+**We welcome feedback from both pandas users and core developers on:**
 
 1. **API Design**: Are the parameter names and defaults intuitive?
 2. **Index Handling**: How should primary keys work when `index=False`?
 3. **Error Messages**: Are the proposed error messages clear and helpful?
 4. **Database Support**: Are there additional database-specific considerations?
 5. **Edge Cases**: What edge cases should be prioritized in testing?
-
-### Implementation Path
-
-For pandas core developers:
-- The proof-of-concept implementation can be adapted for pandas' codebase
-- Database-specific logic can leverage existing SQLAlchemy integration
-- Testing strategy aligns with pandas' existing test patterns
-- Backwards compatibility ensures no breaking changes
-
-### Next Steps
-
-1. **Community Review**: Gather feedback on API design and use cases
-2. **Core Developer Discussion**: Engage with pandas maintainers on implementation approach
-3. **Design Refinement**: Incorporate feedback into final API specification
-4. **Implementation Planning**: Coordinate with pandas development workflow
-
-This feature would be a valuable addition to pandas' database integration capabilities, benefiting users across data science, engineering, and analytics workflows.
-
